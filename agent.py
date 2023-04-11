@@ -1,14 +1,19 @@
-from lux.kit import obs_to_game_state, GameState
-from lux.config import EnvConfig
-from lux.utils import direction_to, my_turn_to_place_factory
 import numpy as np
-import sys
+
+from components.factory_placement import compute_factory_value_map
+from lux.config import EnvConfig
+from lux.kit import obs_to_game_state
+from lux.utils import my_turn_to_place_factory, direction_to
+
+
 class Agent():
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
         self.player = player
         self.opp_player = "player_1" if self.player == "player_0" else "player_0"
         np.random.seed(0)
         self.env_cfg: EnvConfig = env_cfg
+
+        self.factory_value_map = None
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if step == 0:
@@ -17,6 +22,9 @@ class Agent():
         else:
             game_state = obs_to_game_state(step, self.env_cfg, obs)
             # factory placement period
+            if self.factory_value_map is None:
+                self.factory_value_map = compute_factory_value_map(game_state)
+
 
             # how much water and metal you have in your starting pool to give to new factories
             water_left = game_state.teams[self.player].water
@@ -28,8 +36,8 @@ class Agent():
             my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
             if factories_to_place > 0 and my_turn_to_place:
                 # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
-                potential_spawns = np.array(list(zip(*np.where(obs["board"]["valid_spawns_mask"] == 1))))
-                spawn_loc = potential_spawns[np.random.randint(0, len(potential_spawns))]
+                best_spawn_idx = np.argmax(self.factory_value_map * game_state.board.valid_spawns_mask)
+                spawn_loc = np.unravel_index(best_spawn_idx, self.factory_value_map.shape)
                 return dict(spawn=spawn_loc, metal=150, water=150)
             return dict()
 

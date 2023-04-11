@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import distance_transform_cdt
 from scipy.ndimage import binary_dilation
 
-from utils import normalize_matrix
+from components.utils import normalize_matrix
 from lux.kit import GameState
 
 
@@ -34,7 +34,7 @@ def compute_lichen_potential_map(rubble_map, dig_speed=5, steps=20):
     return lichen_potential
 
 
-def compute_score_value_map(game_state: GameState, dig_speed=5, steps=5):
+def compute_factory_value_map(game_state: GameState, dig_speed=5, steps=5):
     rubble_map = game_state.board.rubble
     ice_map = game_state.board.ice
     ore_map = game_state.board.ore
