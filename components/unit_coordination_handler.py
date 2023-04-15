@@ -21,14 +21,15 @@ class RewardActionHandler:
     """
     Object to hold all reward related information regarding one RewardedActionType
     - reward_mask: mask that contains the information of whether the reward is available or not. Only integers, a value n > 1
+    - taken_rewards: tracks how often a reward has been taken at a given position
     implies that n units in total can take this reward.
-
     """
 
     def __init__(self, action_type: RewardedActionType):
         self.type: RewardedActionType = action_type
-        self.reward_map: np.array = None
-        self.reward_mask: np.array = None
+        self.reward_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
+        self.future_discount_factor = np.zeros((MAP_SIZE, MAP_SIZE))
+        self.reward_mask: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.taken_rewards: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.taker_to_priority = [[dict() for j in range(MAP_SIZE)] for i in range(MAP_SIZE)]
 
@@ -127,8 +128,13 @@ class UnitCoordinationHandler:
         """
         return {k: v.counterfactual_reward_mask for k, v in self.reward_action_handler.items()}
 
+    def update_reward_handler(self, action_type: RewardedActionType, reward_map: np.array,
+                              future_discount_factor: np.array):
+        raise NotImplemented
+
     @staticmethod
-    def _build_reward_action_masks(action_type: RewardedActionType, game_state: ExtendedGameState) -> RewardActionHandler:
+    def _build_reward_action_masks(action_type: RewardedActionType,
+                                   game_state: ExtendedGameState) -> RewardActionHandler:
         if action_type is RewardedActionType.MINE_ICE:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.board.ice

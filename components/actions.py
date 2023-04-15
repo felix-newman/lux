@@ -12,6 +12,9 @@ class RewardedActionType(Enum):
     TRANSFER_ORE = 4
     PICKUP_POWER = 5
 
+    def to_action_type(self):
+        return ActionType.__members__.get(str(self.value))
+
 
 class ActionType(Enum):
     MINE_ICE = 1
@@ -41,9 +44,18 @@ class ActionType(Enum):
         return RewardedActionType.__members__.get(str(self.value))
 
 
+class Direction(Enum):
+    CENTER = 0
+    UP = 1
+    DOWN = 2
+    RIGHT = 3
+    LEFT = 4
+
+
 @dataclass
 class ActionItem:
     type: ActionType
+    direction: Direction
     repeat: int
     position: np.array
 
@@ -51,6 +63,7 @@ class ActionItem:
 @dataclass
 class ActionSequence:
     action_items: List[ActionItem]
+    remaining_rewards: List[int]
     reward: int = 0
 
     def to_lux_action_queue(self) -> List[np.array]:
