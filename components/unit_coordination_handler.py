@@ -3,7 +3,7 @@ from typing import Dict
 
 import numpy as np
 
-from components.actions import ActionSequence, RewardedActionType
+from components.actions import ActionSequence, RewardedAction, rewarded_actions, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 
@@ -11,9 +11,9 @@ from components.extended_game_state import ExtendedGameState
 @dataclass
 class UnitReference:
     """Positive rewards taken for the corresponding action type by this unit"""
-    reward_masks: Dict[RewardedActionType, np.array]
+    reward_masks: Dict[RewardedAction, np.array]
 
-    def get_reward_positions(self, action_type: RewardedActionType) -> np.array:
+    def get_reward_positions(self, action_type: RewardedAction) -> np.array:
         return np.argwhere(self.reward_masks[action_type] == 1)
 
 
@@ -25,8 +25,8 @@ class RewardActionHandler:
     implies that n units in total can take this reward.
     """
 
-    def __init__(self, action_type: RewardedActionType):
-        self.type: RewardedActionType = action_type
+    def __init__(self, action_type: RewardedAction):
+        self.type: RewardedAction = action_type
         self.reward_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.future_discount_factor = np.zeros((MAP_SIZE, MAP_SIZE))
         self.reward_mask: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
@@ -58,13 +58,13 @@ class UnitCoordinationHandler:
     def __init__(self, self_player: str):
         self.references: Dict[str, UnitReference] = dict()
         self.occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
-        self.reward_action_handler: Dict[RewardedActionType, RewardActionHandler] = dict()
+        self.reward_action_handler: Dict[RewardedAction, RewardActionHandler] = dict()
 
         self.self_player = self_player
 
     def grant_rewards(self, unit_id: str, action_sequence: ActionSequence):
         """
-        First cleanes all references to this unit, then updates the reward maps for the different actions and computes a
+        First cleans all references to this unit, then updates the reward maps for the different actions and computes a
         reference to all modifications of this unit in order to be able to roll it back properly
         """
 
@@ -97,7 +97,7 @@ class UnitCoordinationHandler:
             else:
                 mask[x, y] = 1
 
-            rewarded_action_type = item.type.to_rewarded_action_type()
+            rewarded_action_type = item.type
             if rewarded_action_type in reward_masks:
                 reward_masks[rewarded_action_type] += mask
             else:
@@ -106,12 +106,14 @@ class UnitCoordinationHandler:
         return reward_masks
 
     def clean_up_unit(self, unit_id: str):
-        unit_reference = self.references[unit_id]
-        for action_type in unit_reference.reward_masks.keys():
-            self.reward_action_handler[action_type].clean_up(unit_id=unit_id, unit_reference=unit_reference)
+        if unit_id in self.references:
+            unit_reference = self.references[unit_id]
+            for action_type in unit_reference.reward_masks.keys():
+                self.reward_action_handler[action_type].clean_up(unit_id=unit_id, unit_reference=unit_reference)
+            del self.references[unit_id]
 
     def initialize_unit_reward_handler(self, game_state: ExtendedGameState):
-        for action_type in RewardedActionType:
+        for action_type in rewarded_actions:
             self.reward_action_handler[action_type] = self._build_reward_action_masks(action_type, game_state)
 
     def get_self_aware_reward_masks(self, unit_id: str):
@@ -128,31 +130,38 @@ class UnitCoordinationHandler:
         """
         return {k: v.counterfactual_reward_mask for k, v in self.reward_action_handler.items()}
 
-    def update_reward_handler(self, action_type: RewardedActionType, reward_map: np.array,
+    def update_reward_handler(self, action_type: RewardedAction, reward_map: np.array,
                               future_discount_factor: np.array):
         raise NotImplemented
 
     @staticmethod
-    def _build_reward_action_masks(action_type: RewardedActionType,
+    def _build_reward_action_masks(action_type: RewardedAction,
                                    game_state: ExtendedGameState) -> RewardActionHandler:
-        if action_type is RewardedActionType.MINE_ICE:
+        if action_type is ActionType.MINE_ICE:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.board.ice
+            reward_action_mask.reward_map = game_state.board.ice
             return reward_action_mask
 
-        elif action_type is RewardedActionType.MINE_ORE:
+        elif action_type is ActionType.MINE_ORE:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.board.ore
+            reward_action_mask.reward_map = game_state.board.ore
             return reward_action_mask
-        elif action_type is RewardedActionType.TRANSFER_ICE:
+        elif action_type is ActionType.TRANSFER_ICE:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.player_factories
+            reward_action_mask.reward_map = game_state.player_factories
             return reward_action_mask
-        elif action_type is RewardedActionType.TRANSFER_ORE:
+        elif action_type is ActionType.TRANSFER_ORE:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.player_factories
+            reward_action_mask.reward_map = game_state.player_factories
+
             return reward_action_mask
-        elif action_type is RewardedActionType.PICKUP_POWER:
+        elif action_type is ActionType.PICKUP_POWER:
             reward_action_mask = RewardActionHandler(action_type)
             reward_action_mask.reward_mask = game_state.player_factories
+            reward_action_mask.reward_map = game_state.player_factories
+
             return reward_action_mask

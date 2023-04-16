@@ -13,7 +13,7 @@ class ExtendedGameState:
     @property
     def player_factories(self) -> np.array:
         player_factories = np.zeros_like(self.game_state.board.rubble)
-        for _, factory in self.game_state.factories[self.player]:
+        for _, factory in self.game_state.factories[self.player].items():
             player_factories[factory.pos_slice] = 1
 
         return player_factories
@@ -21,4 +21,8 @@ class ExtendedGameState:
     @property
     def board(self) -> Board:
         return self.game_state.board
+
+    @property
+    def real_env_steps(self) -> int:
+        return self.game_state.real_env_steps
 
