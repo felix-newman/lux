@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Set, TypeVar, Literal
+from typing import List, Set, Literal
 
 import numpy as np
 

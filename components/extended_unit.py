@@ -3,7 +3,6 @@ from enum import Enum
 from typing import List
 
 from components.actions import ActionSequence, RewardedAction, ActionType
-from lux.unit import Unit
 
 
 class UnitRole(Enum):
@@ -30,8 +29,7 @@ class UnitState(Enum):
 
 
 @dataclass
-class ExtendedUnit:
-    unit: Unit
+class UnitMetadata:
     unit_id: str
     cur_action_sequence: ActionSequence
     role: UnitRole

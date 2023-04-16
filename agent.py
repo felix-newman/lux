@@ -5,7 +5,7 @@ import numpy as np
 
 from components.actions import ActionSequence
 from components.extended_game_state import ExtendedGameState
-from components.extended_unit import UnitRole, ExtendedUnit
+from components.extended_unit import UnitRole, UnitMetadata
 from components.factory_placement import compute_factory_value_map
 from components.unit_controller import UnitController
 from components.unit_coordination_handler import UnitCoordinationHandler
@@ -26,7 +26,7 @@ class Agent():
         self.unit_controller = UnitController()
         self.unit_coordination_handler = UnitCoordinationHandler(self_player=self.player)
 
-        self.tracked_units: Dict[str, ExtendedUnit] = dict()
+        self.tracked_units: Dict[str, UnitMetadata] = dict()
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if step == 0:
@@ -67,37 +67,50 @@ class Agent():
         if game_state.real_env_steps == 0:
             self.setup(game_state)
 
-        print(step, obs['units'][self.player], file=sys.stderr)
+        #print(step, obs['units'][self.player], file=sys.stderr)
 
         # TODO factory logic and updating of coordination handler
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             if factory.can_build_heavy(game_state):
                 actions[factory_id] = factory.build_heavy()
+            elif factory.can_build_light(game_state):
+                actions[factory_id] = factory.build_light()
 
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
             if unit_id not in self.tracked_units:
-                self.tracked_units[unit_id] = ExtendedUnit(unit=unit, unit_id=unit_id, role=UnitRole.MINER,
+                self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=UnitRole.MINER,
                                                            cur_action_sequence=ActionSequence(action_items=[], reward=0,
                                                                                               remaining_rewards=[]))
 
         # clean up dead units, units with empty action sequences
+        units_to_remove = []
         for unit_id in self.tracked_units:
-            if len(game_state.game_state.units[self.player][unit_id].action_queue) == 0:
+            unit = game_state.game_state.units[self.player].get(unit_id)
+            if unit is None:
+                units_to_remove.append(unit_id)
+            if unit is None or len(unit.action_queue) == 0:
                 self.unit_coordination_handler.clean_up_unit(unit_id)
 
-        for unit_id, unit in self.tracked_units.items():
-            if len(game_state.game_state.units[self.player][unit_id].action_queue) == 0:
+        for unit_id in units_to_remove:
+            del self.tracked_units[unit_id]
+
+        for unit_id, unit_meta in self.tracked_units.items():
+            unit = game_state.game_state.units[self.player][unit_id]
+            if len(unit.action_queue) == 0:
                 # TODO masks are not self aware at the moment
-                action_sequence = self.unit_controller.find_optimally_rewarded_action_sequence(unit,
+                action_sequence = self.unit_controller.find_optimally_rewarded_action_sequence(unit, unit_meta,
                                                                                                self.unit_coordination_handler.occupancy_map,
                                                                                                game_state.board.rubble,
                                                                                                reward_maps=self.unit_coordination_handler.reward_action_handler,
                                                                                                real_env_step=game_state.real_env_steps)
-                self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence)
-                unit.cur_action_sequence = action_sequence
-                print(unit.unit.pos, unit_id, unit.cur_action_sequence, file=sys.stderr)
-                actions[unit_id] = unit.cur_action_sequence.to_lux_action_queue()
+                if not action_sequence.empty:
+                    self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence)
+                    unit_meta.cur_action_sequence = action_sequence
+                    actions[unit_id] = unit_meta.cur_action_sequence.to_lux_action_queue()
+                    print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+                else:
+                    print(f"no action sequence found for unit {unit_id}", file=sys.stderr)
         print(f"Actions: {actions}", file=sys.stderr)
         return actions
 
