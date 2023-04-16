@@ -15,6 +15,9 @@ def normalize_matrix(matrix):
 
 
 def find_top_n(n: int, arr: np.array):
+    """
+    Finds the top n elements in a numpy array and returns their indices as a list of tuples.
+    """
     indices = np.argpartition(arr, -n, axis=None)[-n:]
 
     # convert the flattened indices to 2D indices
@@ -49,16 +52,20 @@ def get_path(start, end) -> List[Tuple[int, int]]:
     x_step = 1 if dx > 0 else -1
     y_step = 1 if dy > 0 else -1
     max_delta = max(abs_dx, abs_dy)
-    for i in range(1, max_delta):
-        x += x_step * min(abs_dx, i)
-        y += y_step * min(abs_dy, i)
+    for i in range(abs_dx):
+        x += x_step
         path.append((x, y))
-    path.append(end)
+    for i in range(abs_dy):
+        y += y_step
+        path.append((x, y))
     return path
+
 
 
 def get_cost_profile(positions: np.array, cost_map: np.array):
     """Returns the total cost of the positions given in the first list."""
+    if not np.any(positions):
+        return np.array([0])
     row_indices, col_indices = positions[:, 0], positions[:, 1]
     return cost_map[row_indices, col_indices]
 
