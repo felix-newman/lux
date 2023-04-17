@@ -95,6 +95,7 @@ class ActionSequence:
         for item in self.action_items[1:]:
             if item.type != cur_item.type:
                 cur_length += 1
+                cur_item = item
         cur_length += 1
         return cur_length
 

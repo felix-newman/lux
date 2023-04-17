@@ -14,7 +14,7 @@ def normalize_matrix(matrix):
     return normalized_matrix
 
 
-def find_top_n(n: int, arr: np.array)-> List[Tuple[int, int]]:
+def find_top_n(n: int, arr: np.array) -> List[Tuple[int, int]]:
     """
     Finds the top n elements in a numpy array and returns their indices as a list of tuples.
     """
@@ -61,6 +61,42 @@ def get_path(start, end) -> List[Tuple[int, int]]:
     return path
 
 
+def find_collision_path(mask: np.array, start, end) -> List[Tuple[int, int]]:
+    if mask[start] == 1 or mask[end] == 1:
+        return None
+
+    path = []
+    visited = {start}
+    current = start
+    while current != end:
+        # Find neighbors of current position
+        neighbors = []
+        if current[0] > 0 and mask[current[0] - 1, current[1]] == 0 and (current[0] - 1, current[1]) not in visited:
+            neighbors.append((current[0] - 1, current[1]))
+        if current[0] < mask.shape[0] - 1 and mask[current[0] + 1, current[1]] == 0 and (current[0] + 1, current[1]) not in visited:
+            neighbors.append((current[0] + 1, current[1]))
+        if current[1] > 0 and mask[current[0], current[1] - 1] == 0 and (current[0], current[1] - 1) not in visited:
+            neighbors.append((current[0], current[1] - 1))
+        if current[1] < mask.shape[1] - 1 and mask[current[0], current[1] + 1] == 0 and (current[0], current[1] + 1) not in visited:
+            neighbors.append((current[0], current[1] + 1))
+
+        # Choose the neighbor closest to the endpoint
+        if neighbors:
+            neighbor_distances = [np.linalg.norm(np.array(neighbor) - np.array(end)) for neighbor in neighbors]
+            closest_neighbor_index = np.argmin(neighbor_distances)
+            closest_neighbor = neighbors[closest_neighbor_index]
+            path.append(closest_neighbor)
+            visited.add(closest_neighbor)
+            current = closest_neighbor
+        else:
+            # If no valid neighbors, backtrack to the last unexplored position
+            path.pop()
+            if not path:
+                return None
+            current = path[-1]
+
+    return path
+
 
 def get_cost_profile(positions: np.array, cost_map: np.array) -> np.array:
     """Returns the total cost of the positions given in the first list."""
@@ -69,13 +105,13 @@ def get_cost_profile(positions: np.array, cost_map: np.array) -> np.array:
     row_indices, col_indices = positions[:, 0], positions[:, 1]
     return cost_map[row_indices, col_indices]
 
+
 def transform_cost_profile(cost_profile: np.array, unit_type: str) -> np.array:
     """Transforms the cost profile according to the unit type."""
     if unit_type == 'HEAVY':
         return np.floor(cost_profile + 20)
     elif unit_type == 'LIGHT':
-        return np.floor(1 + cost_profile*0.05)
-
+        return np.floor(1 + cost_profile * 0.05)
 
 
 def build_travel_graph(cost_map: np.array):

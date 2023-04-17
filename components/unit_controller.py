@@ -8,7 +8,7 @@ from components.actions import ActionSequence, ActionItem, ActionType, Direction
 from components.constants import MAP_SIZE
 from components.extended_unit import UnitRole, UnitMetadata
 from components.unit_coordination_handler import RewardActionHandler
-from components.utils import find_top_n, get_path, get_cost_profile, transform_cost_profile
+from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_path
 from lux.unit import Unit
 
 
@@ -63,7 +63,6 @@ class UnitController:
                                           reward_maps: Dict[RewardedAction, RewardActionHandler],
                                           rubble_map: np.array, occupancy_map: np.array,
                                           real_env_step: int) -> ActionSequence:
-        power_start = unit.power - 10  # TODO cost for updating the action queue
         unit_charge = 10 if unit.unit_type == 'HEAVY' else 1  # TODO import constant here
         move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
         digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
@@ -76,16 +75,17 @@ class UnitController:
         position_sequences = self.create_candidate_sequences(unit.pos, rewarded_action_sequence,
                                                              reward_maps, occupancy_map)
         best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
-
         for sequence in position_sequences:
             sequence = [(unit.pos[0], unit.pos[1])] + sequence
             segments = list(zip(sequence, sequence[1:]))
-            segment_waypoints = [get_path(segment[0], segment[1]) for segment in segments]  # TODO dont walk into enemy factories
+            segment_waypoints = [find_collision_path(mask=occupancy_map, start=segments[0][0], end=segments[0][1])] + [
+                get_path(segment[0], segment[1]) for segment in segments[1:]]  # TODO dont walk into enemy factories
             segment_cost_profiles = [get_cost_profile(positions=np.array(waypoints), cost_map=rubble_map) for waypoints in
                                      segment_waypoints]
             segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
                                      segment_cost_profiles]
             power_profiles = []
+            power_start = unit.power - 10  # TODO cost for updating the action queue
             for (cost_profile, following_rewarded_action) in zip(segment_cost_profiles, rewarded_action_sequence):
                 power_profile = power_start + np.cumsum(
                     -cost_profile + unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
@@ -97,7 +97,7 @@ class UnitController:
                 # TODO consider edge cases with self destruction
                 if following_rewarded_action == ActionType.PICKUP_POWER:
                     # TODO this should be taking into account the power situation of the factory
-                    power_end = power_end + 50 if unit.unit_type == 'LIGHT' else power_end + 500
+                    power_end = power_end + 50 if unit.unit_type == 'LIGHT' else power_end + 200
                 power_start = power_end
             else:
                 power_for_digging = self._power_for_digging(power_profiles=power_profiles,
