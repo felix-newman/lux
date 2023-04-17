@@ -14,7 +14,7 @@ def normalize_matrix(matrix):
     return normalized_matrix
 
 
-def find_top_n(n: int, arr: np.array):
+def find_top_n(n: int, arr: np.array)-> List[Tuple[int, int]]:
     """
     Finds the top n elements in a numpy array and returns their indices as a list of tuples.
     """

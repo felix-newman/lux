@@ -1,13 +1,14 @@
 import math
+import sys
 from typing import Dict, List, Tuple
 
 import numpy as np
 
-from components.actions import ActionSequence, RewardedActionSequence, ActionItem, ActionType, Direction, RewardedAction
+from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction
 from components.constants import MAP_SIZE
 from components.extended_unit import UnitRole, UnitMetadata
 from components.unit_coordination_handler import RewardActionHandler
-from components.utils import create_sequences, find_top_n, get_path, get_cost_profile
+from components.utils import find_top_n, get_path, get_cost_profile
 from lux.unit import Unit
 
 
@@ -15,8 +16,8 @@ class UnitController:
     def __init__(self, beam_width=2):
         """Precompute the allowed reward action sequences for all unit roles"""
         self.valid_reward_sequences = dict()
-        self.valid_reward_sequences[UnitRole.MINER] = [RewardedActionSequence(
-            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE, ActionType.PICKUP_POWER])]
+        self.valid_reward_sequences[UnitRole.MINER] = [
+            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE, ActionType.PICKUP_POWER]]
 
         self.beam_width = beam_width
         self.day_night_cycle = self._build_day_night_cycle()
@@ -37,30 +38,37 @@ class UnitController:
 
         return best_sequence
 
+    def create_candidate_sequences(self, pos: np.array, rewarded_actions: List[RewardedAction], reward_maps,
+                                   occupancy_map: np.array) -> List[List[Tuple[int, int]]]:
+        if len(rewarded_actions) == 0:
+            return [[]]
+
+        distance_map = np.sum(np.abs(np.indices((MAP_SIZE, MAP_SIZE)) - np.array(pos)[:, None, None]), axis=0)
+        discount_map = 1 - distance_map / (2 * MAP_SIZE)
+
+        cur_action = rewarded_actions[0]
+        discounted_reward_map = np.where(reward_maps[cur_action].reward_mask != 0, 1, 0) * discount_map
+
+        candidate_sequences = []
+        candidates = find_top_n(self.beam_width, discounted_reward_map)
+        for candidate in candidates:
+            candidate_sequences += [[(candidate[0], candidate[1])] + sequence for sequence in
+                                    self.create_candidate_sequences(candidate, rewarded_actions[1:], reward_maps, occupancy_map)]
+        return candidate_sequences
+
     def calculate_optimal_action_sequence(self, unit: Unit,
-                                          rewarded_action_sequence: RewardedActionSequence,
+                                          rewarded_action_sequence: List[RewardedAction],
                                           reward_maps: Dict[RewardedAction, RewardActionHandler],
                                           rubble_map: np.array, occupancy_map: np.array,
                                           real_env_step: int) -> ActionSequence:
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
         # considered in the search
-
-        distance_map = np.sum(np.abs(np.indices((MAP_SIZE, MAP_SIZE)) - np.array(unit.pos)[:, None, None]), axis=0)
-        discount_map = 1 - distance_map / (2 * MAP_SIZE)
-
-        discounted_reward_maps = [np.where(reward_maps[action].reward_mask != 0, 1, 0) * discount_map for action in
-                                  rewarded_action_sequence.action_items]
-        # TODO candidate generation should take into consideration the current position of the unit in the sequence,
-        # right now it assumes a constant starting point
-        candidates = [find_top_n(2, discounted_map) for discounted_map in discounted_reward_maps]
-
-        position_sequences = create_sequences(candidates)
+        position_sequences = self.create_candidate_sequences(unit.pos, rewarded_action_sequence,
+                                                             reward_maps, occupancy_map)
         best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
 
-        # TODO potential for optimization: If a sequence visits positions in an order which is known to be impossible due to
-        # power constraints it can be discarded
-        # TODO right now segments are discard if the robot runs out of power. This is not optimal, since the robot could recharge at the
+        # TODO right now segments are discarded if the robot runs out of power. This is not optimal, since the robot could recharge at the
         # end of the segment and then continue
         for sequence in position_sequences:
             # TODO careful what happens when already on the field where the action is supposed to take place
@@ -106,7 +114,7 @@ class UnitController:
                 cur_ore = unit.cargo.ore
                 cur_pos = unit.pos
                 for (waypoints, power_profile, following_rewarded_action) in zip(segment_waypoints, power_profiles,
-                                                                                 rewarded_action_sequence.action_items):
+                                                                                 rewarded_action_sequence):
                     action_items += self._translate_waypoints_to_actions(start=cur_pos, waypoints=waypoints,
                                                                          occupancy_map=occupancy_map)  # TODO care for collisions
                     # TODO compute repeat variable and set it in the action item afterwards would be better. Should be found by optimization
@@ -132,9 +140,10 @@ class UnitController:
                                                     cur_power=power_profile[-1],
                                                     reward_maps=reward_maps, battery_capacity=battery_capacity)
 
-                action_sequence = ActionSequence(action_items=action_items, reward=reward,
-                                                 remaining_rewards=[
-                                                     0])  # TODO compute remaining rewards, should be done in calculate_reward()
+                # TODO compute remaining rewards, should be done in calculate_reward()
+                reward -= len(action_items) * 5  # TODO this is a hack to make the robot not do too many actions
+                action_sequence = ActionSequence(action_items=action_items, reward=reward, remaining_rewards=[0])
+
                 if action_sequence.estimate_lux_action_queue_length() < 20:
                     if action_sequence.reward > best_action_sequence.reward:
                         best_action_sequence = action_sequence
@@ -143,7 +152,7 @@ class UnitController:
 
     @staticmethod
     def _build_day_night_cycle():
-        return np.array(([1] * 30 + [0] * 20) * 30) # TODO currently extends into the future
+        return np.array(([1] * 30 + [0] * 20) * 30)  # TODO currently extends into the future
 
     @staticmethod
     def calculate_reward(action_item: ActionItem, reward_maps: Dict[RewardedAction, RewardActionHandler], cur_ice: int, cur_ore: int,
@@ -161,7 +170,9 @@ class UnitController:
             return reward * cur_ice
         if action_type is ActionType.PICKUP_POWER:
             return reward * (battery_capacity - cur_power)
-        return reward
+        else:
+            print("Warning: invalid action type for reward", file=sys.stderr)
+        return 0
 
     @staticmethod
     def _translate_waypoints_to_actions(start: np.array, waypoints: List[Tuple[int, int]], occupancy_map: np.array) -> List[ActionItem]:

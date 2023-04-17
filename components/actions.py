@@ -126,8 +126,3 @@ class ActionSequence:
     @property
     def empty(self):
         return len(self.action_items) == 0
-
-
-@dataclass
-class RewardedActionSequence:
-    action_items: List[RewardedAction]

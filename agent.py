@@ -73,8 +73,8 @@ class Agent():
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             if factory.can_build_heavy(game_state):
                 actions[factory_id] = factory.build_heavy()
-            elif factory.can_build_light(game_state):
-                actions[factory_id] = factory.build_light()
+            # elif factory.can_build_light(game_state):
+            #     actions[factory_id] = factory.build_light()
 
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():

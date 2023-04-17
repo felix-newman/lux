@@ -150,18 +150,18 @@ class UnitCoordinationHandler:
             return reward_action_mask
         elif action_type is ActionType.TRANSFER_ICE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories
-            reward_action_mask.reward_map = game_state.player_factories
+            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask.reward_map = game_state.player_factories * 10
             return reward_action_mask
         elif action_type is ActionType.TRANSFER_ORE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories
-            reward_action_mask.reward_map = game_state.player_factories
+            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask.reward_map = game_state.player_factories * 10
 
             return reward_action_mask
         elif action_type is ActionType.PICKUP_POWER:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories
-            reward_action_mask.reward_map = game_state.player_factories
+            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask.reward_map = game_state.player_factories * 0.0001
 
             return reward_action_mask
