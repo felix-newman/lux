@@ -29,7 +29,7 @@ class RewardActionHandler:
         self.type: RewardedAction = action_type
         self.reward_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.future_discount_factor = np.zeros((MAP_SIZE, MAP_SIZE))
-        self.reward_mask: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
+        self._reward_mask: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.taken_rewards: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
         self.taker_to_priority = [[dict() for j in range(MAP_SIZE)] for i in range(MAP_SIZE)]
 
@@ -45,13 +45,17 @@ class RewardActionHandler:
 
     def self_aware_reward_mask(self, unit_reference: UnitReference) -> np.array:
         if self.type in unit_reference.reward_masks:
-            return self.reward_mask - self.taken_rewards + unit_reference.reward_masks[self.type]
+            return self._reward_mask - self.taken_rewards + unit_reference.reward_masks[self.type]
         else:
-            return self.reward_mask - self.taken_rewards
+            return self._reward_mask - self.taken_rewards
 
     @property
     def counterfactual_reward_mask(self) -> np.array:
-        return self.reward_mask
+        return self._reward_mask
+
+    @property
+    def available_reward_mask(self) -> np.array:
+        return self._reward_mask - self.taken_rewards
 
 
 class UnitCoordinationHandler:
@@ -139,29 +143,29 @@ class UnitCoordinationHandler:
                                    game_state: ExtendedGameState) -> RewardActionHandler:
         if action_type is ActionType.MINE_ICE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.board.ice
+            reward_action_mask._reward_mask = game_state.board.ice
             reward_action_mask.reward_map = game_state.board.ice
             return reward_action_mask
 
         elif action_type is ActionType.MINE_ORE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.board.ore
+            reward_action_mask._reward_mask = game_state.board.ore
             reward_action_mask.reward_map = game_state.board.ore
             return reward_action_mask
         elif action_type is ActionType.TRANSFER_ICE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask._reward_mask = game_state.player_factories * 10
             reward_action_mask.reward_map = game_state.player_factories * 10
             return reward_action_mask
         elif action_type is ActionType.TRANSFER_ORE:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask._reward_mask = game_state.player_factories * 10
             reward_action_mask.reward_map = game_state.player_factories * 10
 
             return reward_action_mask
         elif action_type is ActionType.PICKUP_POWER:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask.reward_mask = game_state.player_factories * 10
+            reward_action_mask._reward_mask = game_state.player_factories * 10
             reward_action_mask.reward_map = game_state.player_factories * 0.0001
 
             return reward_action_mask

@@ -62,12 +62,20 @@ def get_path(start, end) -> List[Tuple[int, int]]:
 
 
 
-def get_cost_profile(positions: np.array, cost_map: np.array):
+def get_cost_profile(positions: np.array, cost_map: np.array) -> np.array:
     """Returns the total cost of the positions given in the first list."""
     if not np.any(positions):
         return np.array([0])
     row_indices, col_indices = positions[:, 0], positions[:, 1]
     return cost_map[row_indices, col_indices]
+
+def transform_cost_profile(cost_profile: np.array, unit_type: str) -> np.array:
+    """Transforms the cost profile according to the unit type."""
+    if unit_type == 'HEAVY':
+        return np.floor(cost_profile + 20)
+    elif unit_type == 'LIGHT':
+        return np.floor(1 + cost_profile*0.05)
+
 
 
 def build_travel_graph(cost_map: np.array):

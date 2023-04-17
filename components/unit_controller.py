@@ -8,7 +8,7 @@ from components.actions import ActionSequence, ActionItem, ActionType, Direction
 from components.constants import MAP_SIZE
 from components.extended_unit import UnitRole, UnitMetadata
 from components.unit_coordination_handler import RewardActionHandler
-from components.utils import find_top_n, get_path, get_cost_profile
+from components.utils import find_top_n, get_path, get_cost_profile, transform_cost_profile
 from lux.unit import Unit
 
 
@@ -17,7 +17,9 @@ class UnitController:
         """Precompute the allowed reward action sequences for all unit roles"""
         self.valid_reward_sequences = dict()
         self.valid_reward_sequences[UnitRole.MINER] = [
-            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE, ActionType.PICKUP_POWER]]
+            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE, ActionType.PICKUP_POWER],
+            [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
+        ]
 
         self.beam_width = beam_width
         self.day_night_cycle = self._build_day_night_cycle()
@@ -47,7 +49,7 @@ class UnitController:
         discount_map = 1 - distance_map / (2 * MAP_SIZE)
 
         cur_action = rewarded_actions[0]
-        discounted_reward_map = np.where(reward_maps[cur_action].reward_mask != 0, 1, 0) * discount_map
+        discounted_reward_map = np.where(reward_maps[cur_action].available_reward_mask > 0, 1, 0) * discount_map
 
         candidate_sequences = []
         candidates = find_top_n(self.beam_width, discounted_reward_map)
@@ -78,6 +80,8 @@ class UnitController:
             segment_waypoints = [get_path(segment[0], segment[1]) for segment in segments]  # TODO dont walk into enemy factories
             segment_cost_profiles = [get_cost_profile(positions=np.array(waypoints), cost_map=rubble_map) for waypoints in
                                      segment_waypoints]
+            segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
+                                     segment_cost_profiles]
             power_profiles = []
 
             power_start = unit.power
@@ -89,16 +93,18 @@ class UnitController:
             battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 100  # and here
 
             safety_moves = 2  # TODO collect free parameters in central place
-            for cost_profile in segment_cost_profiles:
-                # TODO simplification. For light units there is actually a floor() operation involved, which leads this to
-                # be an upper bound
+            for (cost_profile, following_rewarded_action) in zip(segment_cost_profiles, rewarded_action_sequence):
                 power_profile = power_start + np.cumsum(
                     -cost_profile + unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
                 if np.any(power_profile < 0):
                     # not valid sequence, robot runs out of power
                     break
                 power_profiles.append(power_profile)
+
                 power_end = power_profile[-1]
+                if following_rewarded_action == ActionType.PICKUP_POWER:
+                    # TODO this should be taking into account the power situation of the factory
+                    power_end = power_end + 50 if unit.unit_type == 'LIGHT' else power_end + 500
                 power_start = power_end
             else:
                 # TODO consider edge cases with self destruction
@@ -123,10 +129,10 @@ class UnitController:
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs) # repeat refers to the number of additional actions
                         cur_ore += repeat * digging_speed
                     if following_rewarded_action is ActionType.MINE_ICE:
-                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs) # repeat refers to the number of additional actions
                         cur_ice += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.PICKUP_POWER:
