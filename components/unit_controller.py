@@ -63,6 +63,13 @@ class UnitController:
                                           reward_maps: Dict[RewardedAction, RewardActionHandler],
                                           rubble_map: np.array, occupancy_map: np.array,
                                           real_env_step: int) -> ActionSequence:
+        power_start = unit.power - 10  # TODO cost for updating the action queue
+        unit_charge = 10 if unit.unit_type == 'HEAVY' else 1  # TODO import constant here
+        move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
+        digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
+        digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
+        battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 150  # and here
+
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
         # considered in the search
@@ -70,11 +77,7 @@ class UnitController:
                                                              reward_maps, occupancy_map)
         best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
 
-        # TODO right now segments are discarded if the robot runs out of power. This is not optimal, since the robot could recharge at the
-        # end of the segment and then continue
         for sequence in position_sequences:
-            # TODO careful what happens when already on the field where the action is supposed to take place
-            # create action sequence, estimate power consumption
             sequence = [(unit.pos[0], unit.pos[1])] + sequence
             segments = list(zip(sequence, sequence[1:]))
             segment_waypoints = [get_path(segment[0], segment[1]) for segment in segments]  # TODO dont walk into enemy factories
@@ -83,34 +86,26 @@ class UnitController:
             segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
                                      segment_cost_profiles]
             power_profiles = []
-
-            power_start = unit.power
-            power_end = None
-            unit_charge = 10 if unit.unit_type == 'HEAVY' else 1  # TODO import constant here
-            move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
-            digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
-            digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
-            battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 100  # and here
-
-            safety_moves = 2  # TODO collect free parameters in central place
             for (cost_profile, following_rewarded_action) in zip(segment_cost_profiles, rewarded_action_sequence):
                 power_profile = power_start + np.cumsum(
                     -cost_profile + unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
                 if np.any(power_profile < 0):
-                    # not valid sequence, robot runs out of power
                     break
                 power_profiles.append(power_profile)
 
                 power_end = power_profile[-1]
+                # TODO consider edge cases with self destruction
                 if following_rewarded_action == ActionType.PICKUP_POWER:
                     # TODO this should be taking into account the power situation of the factory
                     power_end = power_end + 50 if unit.unit_type == 'LIGHT' else power_end + 500
                 power_start = power_end
             else:
-                # TODO consider edge cases with self destruction
-                # robot does not run out of power during moving
-                power_for_digging = power_end - safety_moves * move_costs
-                if power_for_digging < digging_costs:
+                power_for_digging = self._power_for_digging(power_profiles=power_profiles,
+                                                            rewarded_action_sequence=rewarded_action_sequence)
+                safety_moves = 2  # TODO collect free parameters in central place
+                power_for_digging -= safety_moves * move_costs
+                if power_for_digging < digging_costs and (
+                        ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence):
                     continue
 
                 # build sequence
@@ -129,10 +124,10 @@ class UnitController:
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = math.floor(power_for_digging / digging_costs) # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
                         cur_ore += repeat * digging_speed
                     if following_rewarded_action is ActionType.MINE_ICE:
-                        repeat = math.floor(power_for_digging / digging_costs) # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
                         cur_ice += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.PICKUP_POWER:
@@ -203,3 +198,15 @@ class UnitController:
             cur_pos = waypoint
 
         return action_items
+
+    @staticmethod
+    def _power_for_digging(power_profiles: List[np.array], rewarded_action_sequence: List[RewardedAction]):
+        try:
+            digging_idx = rewarded_action_sequence.index(ActionType.MINE_ICE)
+        except ValueError:
+            try:
+                digging_idx = rewarded_action_sequence.index(ActionType.MINE_ORE)
+            except ValueError:
+                return 0
+
+        return np.min(np.concatenate(power_profiles[digging_idx + 1:]))
