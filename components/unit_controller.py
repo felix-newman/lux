@@ -18,7 +18,6 @@ class UnitController:
         """Precompute the allowed reward action sequences for all unit roles"""
         self.valid_reward_sequences = dict()
         self.valid_reward_sequences[UnitRole.MINER] = [
-            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE, ActionType.PICKUP_POWER],
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
         ]
 
@@ -58,7 +57,7 @@ class UnitController:
 
     @staticmethod
     def move_unit_to_closest_free_square(unit: Unit, unit_coordination_handler: UnitCoordinationHandler) -> ActionSequence:
-        print(f"Move to closest free square {unit.pos}, {unit.unit_id}", file=sys.stderr)
+        #print(f"Move to closest free square {unit.pos}, {unit.unit_id}", file=sys.stderr)
         for direction, delta in DIRECTION_DELTAS.items():
             # new position
             new_pos = unit.pos + delta
@@ -142,7 +141,7 @@ class UnitController:
             segment_waypoints = [find_collision_path(mask=occupancy_map, start=segments[0][0], end=segments[0][1])] + [
                 get_path(segment[0], segment[1]) for segment in segments[1:]]
             if segment_waypoints[0] is None or (
-                    segment_waypoints[0] == [] and occupancy_map[unit.pos[0], unit.pos[1]] != unit.unit_id.split('_')[1]):
+                    segment_waypoints[0] == [] and occupancy_map[unit.pos[0], unit.pos[1]] != 0):
                 continue
 
             segment_cost_profiles = [get_cost_profile(positions=np.array(waypoints), cost_map=rubble_map) for waypoints in

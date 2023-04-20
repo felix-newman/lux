@@ -31,6 +31,7 @@ class UnitState(Enum):
 @dataclass
 class UnitMetadata:
     unit_id: str
+    unit_type: str
     cur_action_sequence: ActionSequence
     role: UnitRole
 

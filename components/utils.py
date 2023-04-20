@@ -90,6 +90,8 @@ def find_collision_path(mask: np.array, start, end) -> List[Tuple[int, int]]:
             current = closest_neighbor
         else:
             # If no valid neighbors, backtrack to the last unexplored position
+            if not path:
+                return None
             path.pop()
             if not path:
                 return None

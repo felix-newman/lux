@@ -82,7 +82,7 @@ class Agent():
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
             if unit_id not in self.tracked_units:
-                self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=UnitRole.MINER,
+                self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=UnitRole.MINER, unit_type=unit.unit_type,
                                                            cur_action_sequence=ActionSequence(action_items=[], reward=0,
                                                                                               remaining_rewards=[]))
 
@@ -100,7 +100,9 @@ class Agent():
 
 
         # update unit action sequences
-        for unit_id, unit_meta in self.tracked_units.items():
+        sorted_units = sorted(self.tracked_units.items(), key=lambda x: 1 if x[1].unit_type == 'HEAVY' else 0, reverse=True)
+
+        for unit_id, unit_meta in sorted_units:
             unit = game_state.game_state.units[self.player][unit_id]
             action_sequence, role_change_requested = self.unit_controller.update_action_queue(unit=unit, unit_meta=unit_meta,
                                                                                               unit_coordination_handler=self.unit_coordination_handler,
@@ -116,9 +118,9 @@ class Agent():
                 next_action = lux_action_queue[0]
                 self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
 
-                print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+                #print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
             else:
-                print(f"No action queue update for {unit_id}", file=sys.stderr)
+                #print(f"No action queue update for {unit_id}", file=sys.stderr)
                 if len(unit.action_queue) > 0:
                     # TODO only do if robot has enough power to execute action
                     next_action = unit.action_queue[0]
@@ -129,7 +131,7 @@ class Agent():
             if role_change_requested:
                 # TODO implement role change
                 continue
-        print(f"Actions: {actions}", file=sys.stderr)
+        print(f"Step: {step} Actions: {actions}", file=sys.stderr)
         return actions
 
     def setup(self, game_state: ExtendedGameState):
