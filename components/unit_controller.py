@@ -19,6 +19,7 @@ class UnitController:
         self.valid_reward_sequences = dict()
         self.valid_reward_sequences[UnitRole.MINER] = [
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
+            [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
         ]
 
         self.beam_width = beam_width
@@ -57,7 +58,7 @@ class UnitController:
 
     @staticmethod
     def move_unit_to_closest_free_square(unit: Unit, unit_coordination_handler: UnitCoordinationHandler) -> ActionSequence:
-        #print(f"Move to closest free square {unit.pos}, {unit.unit_id}", file=sys.stderr)
+        # print(f"Move to closest free square {unit.pos}, {unit.unit_id}", file=sys.stderr)
         for direction, delta in DIRECTION_DELTAS.items():
             # new position
             new_pos = unit.pos + delta
@@ -108,7 +109,7 @@ class UnitController:
         discount_map = 1 - distance_map / (2 * MAP_SIZE)
 
         cur_action_type = rewarded_actions[0]
-        discounted_reward_map = np.where(unit_coordination_handler.get_reward_mask(action_type=cur_action_type) > 0, 1, 0) * discount_map
+        discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1, 0) * discount_map
 
         candidate_sequences = []
         candidates = find_top_n(self.beam_width, discounted_reward_map)
@@ -150,7 +151,9 @@ class UnitController:
                                      segment_cost_profiles]
             power_profiles = []
             power_start = unit.power - 10  # TODO cost for updating the action queue
-            for (cost_profile, following_rewarded_action) in zip(segment_cost_profiles, rewarded_action_sequence):
+            segment_end_pos = unit.pos
+            for (cost_profile, following_rewarded_action, waypoints) in zip(segment_cost_profiles, rewarded_action_sequence,
+                                                                            segment_waypoints):
                 power_profile = power_start + np.cumsum(
                     -cost_profile + unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
                 if np.any(power_profile < 0):
@@ -158,10 +161,13 @@ class UnitController:
                 power_profiles.append(power_profile)
 
                 power_end = power_profile[-1]
+                segment_end_pos = segment_end_pos if len(waypoints) == 0 else waypoints[-1]
                 # TODO consider edge cases with self destruction
                 if following_rewarded_action == ActionType.PICKUP_POWER:
-                    # TODO this should be taking into account the power situation of the factory
-                    power_end = power_end + 50 if unit.unit_type == 'LIGHT' else power_end + 200
+                    available_power = unit_coordination_handler.get_actual_reward_map(action_type=ActionType.PICKUP_POWER)[
+                        segment_end_pos[0], segment_end_pos[1]]
+                    power_pickup = min(battery_capacity, available_power * 0.5)
+                    power_end = power_end + power_pickup
                 power_start = power_end
             else:
                 power_for_digging = self._power_for_digging(power_profiles=power_profiles,
@@ -195,15 +201,16 @@ class UnitController:
                         cur_ice += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.PICKUP_POWER:
-                        amount = 3000 if unit.unit_type == 'HEAVY' else 70  # TODO optimize amount of picked up power
+                        available_power = unit_coordination_handler.get_actual_reward_map(action_type=ActionType.PICKUP_POWER)[
+                            segment_end_pos[0], segment_end_pos[1]]
+                        amount = min(battery_capacity, available_power * 0.5)
 
                     rewarded_action = ActionItem(type=following_rewarded_action, position=np.array(cur_pos),
                                                  repeat=repeat, direction=Direction.CENTER, amount=amount)
 
                     new_reward = self.calculate_reward(action_item=rewarded_action, cur_ice=cur_ice, cur_ore=cur_ore,
-                                                       cur_power=power_profile[-1],
                                                        unit_coordination_handler=unit_coordination_handler,
-                                                       battery_capacity=battery_capacity)
+                                                       amount_power=amount)
                     rewarded_action.reward = new_reward
                     reward += new_reward
                     action_items.append(rewarded_action)
@@ -224,20 +231,20 @@ class UnitController:
 
     @staticmethod
     def calculate_reward(action_item: ActionItem, unit_coordination_handler: UnitCoordinationHandler, cur_ice: int, cur_ore: int,
-                         cur_power: int, battery_capacity: int) -> float:
+                         amount_power: int) -> float:
         action_type = action_item.type
         x, y = action_item.position
 
         if action_type is ActionType.MINE_ICE:
-            return unit_coordination_handler.reward_action_handler[action_type].actual_reward_map[x, y] * action_item.repeat
+            return unit_coordination_handler.get_reward_map(ActionType.MINE_ICE)[x, y] * action_item.repeat
         if action_type is ActionType.MINE_ORE:
-            return unit_coordination_handler.reward_action_handler[action_type].actual_reward_map[x, y] * action_item.repeat
+            return unit_coordination_handler.get_reward_map(ActionType.MINE_ORE)[x, y] * action_item.repeat
         if action_type is ActionType.TRANSFER_ORE:
-            return unit_coordination_handler.reward_action_handler[action_type].actual_reward_map[x, y] * cur_ore
+            return unit_coordination_handler.get_reward_map(ActionType.TRANSFER_ORE)[x, y] * cur_ore
         if action_type is ActionType.TRANSFER_ICE:
-            return unit_coordination_handler.reward_action_handler[action_type].actual_reward_map[x, y] * cur_ice
+            return unit_coordination_handler.get_reward_map(ActionType.TRANSFER_ICE)[x, y] * cur_ice
         if action_type is ActionType.PICKUP_POWER:
-            return 0.001 * (battery_capacity - cur_power)
+            return 0.001 * amount_power
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0

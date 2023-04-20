@@ -3,7 +3,7 @@ from typing import Dict
 
 import numpy as np
 
-from components.actions import ActionSequence
+from components.actions import ActionSequence, ActionType
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitRole, UnitMetadata
 from components.factory_placement import compute_factory_value_map
@@ -84,7 +84,7 @@ class Agent():
             if unit_id not in self.tracked_units:
                 self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=UnitRole.MINER, unit_type=unit.unit_type,
                                                            cur_action_sequence=ActionSequence(action_items=[], reward=0,
-                                                                                              remaining_rewards=[]))
+                                                                                              remaining_rewards=[]), last_action=None)
 
         # clean up dead units, units with empty action sequences
         units_to_remove = []
@@ -97,7 +97,12 @@ class Agent():
         for unit_id in units_to_remove:
             del self.tracked_units[unit_id]
 
+        for unit_id, unit_meta in self.tracked_units.items():
+            if unit_meta.last_action == ActionType.PICKUP_POWER:
+                self.unit_coordination_handler.clean_up_action_type(unit_id=unit_id, action_type=ActionType.PICKUP_POWER)
 
+        for factory_id, factory in game_state.game_state.factories[self.player].items():
+            self.unit_coordination_handler.update_factory_rewards(ActionType.PICKUP_POWER, value=factory.power, factory=factory)
 
         # update unit action sequences
         sorted_units = sorted(self.tracked_units.items(), key=lambda x: 1 if x[1].unit_type == 'HEAVY' else 0, reverse=True)
@@ -118,9 +123,9 @@ class Agent():
                 next_action = lux_action_queue[0]
                 self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
 
-                #print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+                # print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
             else:
-                #print(f"No action queue update for {unit_id}", file=sys.stderr)
+                # print(f"No action queue update for {unit_id}", file=sys.stderr)
                 if len(unit.action_queue) > 0:
                     # TODO only do if robot has enough power to execute action
                     next_action = unit.action_queue[0]
@@ -132,6 +137,15 @@ class Agent():
                 # TODO implement role change
                 continue
         print(f"Step: {step} Actions: {actions}", file=sys.stderr)
+
+        for unit_id, unit in game_state.game_state.units[self.player].items():
+            if len(unit.action_queue) > 0:
+                next_action = unit.action_queue[0]
+                if next_action[0] == 2:  # PICKUP_POWER
+                    self.tracked_units[unit_id].last_action = ActionType.PICKUP_POWER
+                else:
+                    self.tracked_units[unit_id].last_action = None
+
         return actions
 
     def setup(self, game_state: ExtendedGameState):

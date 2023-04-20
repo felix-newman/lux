@@ -88,7 +88,7 @@ class ActionItem:
             return np.array([1, int(self.direction.value), 1, 3000, 0, self.repeat])
 
         if self.type == ActionType.PICKUP_POWER:
-            return np.array([2, 0, 4, self.amount, 0, self.repeat])
+            return np.array([2, 0, 4, int(self.amount), 0, self.repeat])
 
 
 @dataclass

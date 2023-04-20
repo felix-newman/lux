@@ -7,6 +7,7 @@ from components.actions import ActionSequence, RewardedAction, rewarded_actions,
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.utils import get_position_after_lux_action
+from lux.factory import Factory
 
 
 @dataclass
@@ -159,6 +160,14 @@ class UnitCoordinationHandler:
                 self.reward_action_handler[action_type].clean_up(unit_id=unit_id, unit_reference=unit_reference)
             del self.references[unit_id]
 
+    def clean_up_action_type(self, action_type: ActionType, unit_id: str):
+        if unit_id in self.references:
+            unit_reference = self.references[unit_id]
+            if action_type in unit_reference.reward_masks:
+                self.reward_action_handler[action_type].clean_up(unit_id=unit_id, unit_reference=unit_reference)
+                del unit_reference.reward_masks[action_type]
+                del unit_reference.reward_maps[action_type]
+
     def initialize_unit_reward_handler(self, game_state: ExtendedGameState):
         for action_type in rewarded_actions:
             self.reward_action_handler[action_type] = self._build_reward_action_masks(action_type, game_state)
@@ -168,11 +177,21 @@ class UnitCoordinationHandler:
 
     def get_reward_map(self, action_type: ActionType) -> np.array:
 
+        return self.reward_action_handler[action_type].reward_map
+
+    def get_actual_reward_mask(self, action_type: ActionType) -> np.array:
+        return self.reward_action_handler[action_type].actual_reward_mask
+
+    def get_actual_reward_map(self, action_type: ActionType) -> np.array:
+
         return self.reward_action_handler[action_type].actual_reward_map
 
     def update_reward_handler(self, action_type: RewardedAction, reward_map: np.array,
                               future_discount_factor: np.array):
         raise NotImplemented
+
+    def update_factory_rewards(self, action_type: RewardedAction, value: float, factory: Factory):
+        self.reward_action_handler[action_type].reward_map[factory.pos_slice] = value
 
     @staticmethod
     def _build_reward_action_masks(action_type: RewardedAction,
@@ -201,7 +220,7 @@ class UnitCoordinationHandler:
             return reward_action_mask
         elif action_type is ActionType.PICKUP_POWER:
             reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.player_factories * 10
-            reward_action_mask.reward_map = game_state.player_factories * 0.0001
+            reward_action_mask._reward_mask = game_state.player_factories * 1000
+            reward_action_mask.reward_map = game_state.player_factories
 
             return reward_action_mask

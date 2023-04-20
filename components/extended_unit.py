@@ -34,5 +34,6 @@ class UnitMetadata:
     unit_type: str
     cur_action_sequence: ActionSequence
     role: UnitRole
+    last_action: ActionType
 
 
