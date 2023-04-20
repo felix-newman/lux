@@ -3,6 +3,8 @@ from typing import List, Tuple
 import numpy as np
 import networkx as nx
 
+from components.actions import Direction
+
 
 def normalize_matrix(matrix):
     """
@@ -62,9 +64,6 @@ def get_path(start, end) -> List[Tuple[int, int]]:
 
 
 def find_collision_path(mask: np.array, start, end) -> List[Tuple[int, int]]:
-    if mask[start] == 1 or mask[end] == 1:
-        return None
-
     path = []
     visited = {start}
     current = start
@@ -82,7 +81,8 @@ def find_collision_path(mask: np.array, start, end) -> List[Tuple[int, int]]:
 
         # Choose the neighbor closest to the endpoint
         if neighbors:
-            neighbor_distances = [np.linalg.norm(np.array(neighbor) - np.array(end)) for neighbor in neighbors]
+            neighbor_distances = [np.linalg.norm(np.array(neighbor) - np.array(end)) for neighbor in
+                                  neighbors]  # TODO use manhattan distance
             closest_neighbor_index = np.argmin(neighbor_distances)
             closest_neighbor = neighbors[closest_neighbor_index]
             path.append(closest_neighbor)
@@ -112,6 +112,22 @@ def transform_cost_profile(cost_profile: np.array, unit_type: str) -> np.array:
         return np.floor(cost_profile + 20)
     elif unit_type == 'LIGHT':
         return np.floor(1 + cost_profile * 0.05)
+
+
+def get_position_after_lux_action(lux_action: np.array, cur_pos: np.array) -> Tuple[int, int]:
+    if lux_action[0] == 0:
+        if lux_action[1] == Direction.CENTER.value:
+            return cur_pos[0], cur_pos[1]
+        elif lux_action[1] == Direction.UP.value:
+            return cur_pos[0], cur_pos[1] - 1
+        elif lux_action[1] == Direction.DOWN.value:
+            return cur_pos[0], cur_pos[1] + 1
+        elif lux_action[1] == Direction.LEFT.value:
+            return cur_pos[0] - 1, cur_pos[1]
+        elif lux_action[1] == Direction.RIGHT.value:
+            return cur_pos[0] + 1, cur_pos[1]
+    else:
+        return cur_pos[0], cur_pos[1]
 
 
 def build_travel_graph(cost_map: np.array):

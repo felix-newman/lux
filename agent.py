@@ -67,14 +67,17 @@ class Agent():
         if game_state.real_env_steps == 0:
             self.setup(game_state)
 
-        #print(step, obs['units'][self.player], file=sys.stderr)
+        self.unit_coordination_handler.build_occupancy_map(game_state, self.opp_player)
 
         # TODO factory logic and updating of coordination handler
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             if factory.can_build_heavy(game_state):
                 actions[factory_id] = factory.build_heavy()
+                self.unit_coordination_handler.mark_field_as_occupied(factory.pos[0], factory.pos[1], 'unit_99999')
+
             elif factory.can_build_light(game_state):
                 actions[factory_id] = factory.build_light()
+                self.unit_coordination_handler.mark_field_as_occupied(factory.pos[0], factory.pos[1], 'unit_99999')
 
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
@@ -89,28 +92,43 @@ class Agent():
             unit = game_state.game_state.units[self.player].get(unit_id)
             if unit is None:
                 units_to_remove.append(unit_id)
-            if unit is None or len(unit.action_queue) == 0:
                 self.unit_coordination_handler.clean_up_unit(unit_id)
 
         for unit_id in units_to_remove:
             del self.tracked_units[unit_id]
 
+
+
+        # update unit action sequences
         for unit_id, unit_meta in self.tracked_units.items():
             unit = game_state.game_state.units[self.player][unit_id]
-            if len(unit.action_queue) == 0:
-                # TODO masks are not self aware at the moment
-                action_sequence = self.unit_controller.find_optimally_rewarded_action_sequence(unit, unit_meta,
-                                                                                               self.unit_coordination_handler.occupancy_map,
-                                                                                               game_state.board.rubble,
-                                                                                               reward_maps=self.unit_coordination_handler.reward_action_handler,
-                                                                                               real_env_step=game_state.real_env_steps)
-                if not action_sequence.empty:
-                    self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence)
-                    unit_meta.cur_action_sequence = action_sequence
-                    actions[unit_id] = unit_meta.cur_action_sequence.to_lux_action_queue()
-                    print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+            action_sequence, role_change_requested = self.unit_controller.update_action_queue(unit=unit, unit_meta=unit_meta,
+                                                                                              unit_coordination_handler=self.unit_coordination_handler,
+                                                                                              game_state=game_state)
+
+            if not action_sequence.empty:
+                self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence)
+                unit_meta.cur_action_sequence = action_sequence
+
+                lux_action_queue = unit_meta.cur_action_sequence.to_lux_action_queue()
+                actions[unit_id] = lux_action_queue
+
+                next_action = lux_action_queue[0]
+                self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
+
+                print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+            else:
+                print(f"No action queue update for {unit_id}", file=sys.stderr)
+                if len(unit.action_queue) > 0:
+                    # TODO only do if robot has enough power to execute action
+                    next_action = unit.action_queue[0]
+                    self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
                 else:
-                    print(f"no action sequence found for unit {unit_id}", file=sys.stderr)
+                    self.unit_coordination_handler.mark_field_as_occupied(unit.pos[0], unit.pos[1], unit_id)
+
+            if role_change_requested:
+                # TODO implement role change
+                continue
         print(f"Actions: {actions}", file=sys.stderr)
         return actions
 

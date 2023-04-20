@@ -47,6 +47,15 @@ class Direction(Enum):
     LEFT = 4
 
 
+DIRECTION_DELTAS = {
+    Direction.CENTER: np.array([0, 0]),
+    Direction.UP: np.array([0, -1]),
+    Direction.RIGHT: np.array([1, 0]),
+    Direction.DOWN: np.array([0, 1]),
+    Direction.LEFT: np.array([-1, 0]),
+}
+
+
 @dataclass
 class ActionItem:
     type: ActionType
@@ -54,6 +63,7 @@ class ActionItem:
     repeat: int
     amount: int
     position: np.array
+    reward: float = 0.0
 
     def to_lux_action(self) -> np.array:
         if self.type == ActionType.MOVE_CENTER:
@@ -99,6 +109,7 @@ class ActionSequence:
         cur_length += 1
         return cur_length
 
+    # TODO bug fix needed
     def to_lux_action_queue(self) -> List[np.array]:
         lux_actions = []
         if self.empty:
