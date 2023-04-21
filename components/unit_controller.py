@@ -20,9 +20,7 @@ class UnitController:
         self.valid_reward_sequences = dict()
         self.valid_reward_sequences[UnitRole.MINER] = [
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
-            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
-            # [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
-            # [ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
+            [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
         ]
         self.valid_reward_sequences[UnitRole.DIGGER] = [
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
@@ -120,6 +118,9 @@ class UnitController:
         cur_action_type = rewarded_actions[0]
         discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1,
                                          0) * discount_map
+        if prev_action is None:
+            discounted_reward_map *= np.where(occupancy_map != 0, 0, 1)
+
         if prev_action == cur_action_type:
             discounted_reward_map[prev_pos[0], prev_pos[1]] = 0
 

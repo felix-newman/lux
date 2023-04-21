@@ -81,6 +81,9 @@ class Agent():
                 actions[factory_id] = factory.build_light()
                 self.unit_coordination_handler.mark_field_as_occupied(factory.pos[0], factory.pos[1], 'unit_99999')
 
+            elif factory.can_water(game_state) and factory.cargo.water > 20:
+                actions[factory_id] = factory.water()
+
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
             if unit_id not in self.tracked_units:
