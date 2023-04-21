@@ -19,6 +19,7 @@ class ActionType(Enum):
     MOVE_RIGHT = 8
     MOVE_LEFT = 9
     DIG = 10
+    RETURN = 11
 
     @property
     def is_factory_action(self) -> bool:
@@ -37,10 +38,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                   ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN]
 
 
 class Direction(Enum):
@@ -96,6 +97,9 @@ class ActionItem:
         if self.type == ActionType.PICKUP_POWER:
             return np.array([2, 0, 4, int(self.amount), 0, self.repeat])
 
+        if self.type == ActionType.RETURN:
+            return None
+
 
 @dataclass
 class ActionSequence:
@@ -137,6 +141,7 @@ class ActionSequence:
                 cur_item = item
 
         lux_actions.append(cur_item.to_lux_action())
+        lux_actions = [x for x in lux_actions if x is not None]
         return lux_actions
 
     def step(self) -> None:

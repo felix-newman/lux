@@ -231,3 +231,8 @@ class UnitCoordinationHandler:
                 (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
                                                                                                1, 0)) * game_state.board.rubble
             return reward_action_handler
+        elif action_type is ActionType.RETURN:
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.player_factories * 1000
+            reward_action_handler.reward_map = game_state.player_factories
+            return reward_action_handler

@@ -24,8 +24,8 @@ class UnitController:
             # [ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
         ]
         self.valid_reward_sequences[UnitRole.DIGGER] = [
-            [ActionType.PICKUP_POWER, ActionType.DIG],
-            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG],
+            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
         ]
 
         self.beam_width = beam_width
