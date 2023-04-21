@@ -4,7 +4,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS
+from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS, \
+    rewarded_actions_from_lux_action_queue
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitRole, UnitMetadata
@@ -49,11 +50,12 @@ class UnitController:
         next_action = unit.action_queue[0]
         if unit_coordination_handler.collision_after_lux_action(next_action, unit.pos, unit_id):
             unit_coordination_handler.clean_up_unit(unit_id)
-            action_sequence = self.find_optimally_rewarded_action_sequence(unit, unit_meta,
-                                                                           unit_coordination_handler.occupancy_map,
-                                                                           game_state.board.rubble,
-                                                                           unit_coordination_handler=unit_coordination_handler,
-                                                                           real_env_step=game_state.real_env_steps)
+            rewarded_actions = rewarded_actions_from_lux_action_queue(unit.action_queue)
+            action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=rewarded_actions,
+                                                                     unit_coordination_handler=unit_coordination_handler,
+                                                                     rubble_map=game_state.board.rubble,
+                                                                     occupancy_map=unit_coordination_handler.occupancy_map,
+                                                                     real_env_step=game_state.real_env_steps)
             if action_sequence.empty:
                 action_sequence = self.move_unit_to_closest_free_square(unit, unit_coordination_handler)
                 return action_sequence, True
@@ -162,7 +164,7 @@ class UnitController:
             segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
                                      segment_cost_profiles]
             power_profiles = []
-            power_start = unit.power - 10  # TODO cost for updating the action queue
+            power_start = unit.power - 10 if unit.unit_type == 'HEAVY' else 1  # TODO cost for updating the action queue
             segment_end_pos = unit.pos
             for (cost_profile, following_rewarded_action, waypoints) in zip(segment_cost_profiles, rewarded_action_sequence,
                                                                             segment_waypoints):
@@ -176,7 +178,8 @@ class UnitController:
                 segment_end_pos = segment_end_pos if len(waypoints) == 0 else waypoints[-1]
                 # TODO consider edge cases with self destruction
                 if following_rewarded_action == ActionType.PICKUP_POWER:
-                    power_pickup = self.calculate_power_pickup(battery_capacity, segment_end_pos, unit, unit_coordination_handler, power_end)
+                    power_pickup = self.calculate_power_pickup(battery_capacity, segment_end_pos, unit, unit_coordination_handler,
+                                                               power_end)
                     power_end += power_pickup
                 power_start = power_end
             else:
@@ -275,6 +278,8 @@ class UnitController:
             return 0.001 * amount_power
         if action_type is ActionType.DIG:
             return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.2
+        if action_type is ActionType.RETURN:
+            return 0
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0

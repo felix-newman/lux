@@ -1,10 +1,10 @@
+import copy
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Set
-from typing_extensions import Literal
+from typing import List, Set, Tuple, Union
 
 import numpy as np
-import copy
+from typing_extensions import Literal
 
 
 class ActionType(Enum):
@@ -36,7 +36,7 @@ class ActionType(Enum):
 
 factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE, ActionType.PICKUP_POWER}
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
-                                  ActionType.MOVE_LEFT}
+                                 ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
                                      ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN}
 
@@ -157,3 +157,40 @@ class ActionSequence:
     @property
     def empty(self):
         return len(self.action_items) == 0
+
+
+def rewarded_actions_from_lux_action_queue(action_queue: List[np.array]) -> List[RewardedAction]:
+    def lux_action_to_type(lux_action: np.array, resource: Union[None, int]) -> Tuple[Union[None, ActionType], Union[None, int]]:
+        if lux_action[0] == 3:
+            if resource == 0:
+                return ActionType.MINE_ICE, None
+            elif resource == 1:
+                return ActionType.MINE_ORE, None
+            else:
+                return ActionType.DIG, None
+        if lux_action[0] == 1:
+            if lux_action[2] == 0:
+                return ActionType.TRANSFER_ICE, 0
+            elif lux_action[2] == 1:
+                return ActionType.TRANSFER_ORE, 1
+
+        if lux_action[0] == 2:
+            return ActionType.PICKUP_POWER, None
+
+        else:
+            return None, None
+
+    rewarded_actions = []
+    action_queue_copy = copy.deepcopy(action_queue)
+    resource = None
+    for idx, lux_action in enumerate(reversed(action_queue_copy)):
+        rewarded_action, resource_this_action = lux_action_to_type(lux_action, resource)
+        if idx == 0 and rewarded_action is None and lux_action[0] == 0:
+            rewarded_action = ActionType.RETURN
+
+        if resource_this_action is not None:
+            resource = resource_this_action
+        if rewarded_action is not None:
+            rewarded_actions.append(rewarded_action)
+
+    return list(reversed(rewarded_actions))

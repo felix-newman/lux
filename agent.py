@@ -137,8 +137,9 @@ class Agent():
                 actions[unit_id] = lux_action_queue
                 print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
 
-                next_action = lux_action_queue[0]
-                self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
+                next_action = lux_action_queue[0] if len(lux_action_queue) > 0 else None
+                if next_action is not None:
+                    self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
 
             else:
                 # print(f"No action queue update for {unit_id}", file=sys.stderr)
