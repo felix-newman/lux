@@ -14,12 +14,18 @@ from lux.unit import Unit
 
 
 class UnitController:
-    def __init__(self, beam_width=2):
+    def __init__(self, beam_width=1):
         """Precompute the allowed reward action sequences for all unit roles"""
         self.valid_reward_sequences = dict()
         self.valid_reward_sequences[UnitRole.MINER] = [
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
-            [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
+            [ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
+            # [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
+            # [ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
+        ]
+        self.valid_reward_sequences[UnitRole.DIGGER] = [
+            [ActionType.PICKUP_POWER, ActionType.DIG],
+            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG],
         ]
 
         self.beam_width = beam_width
@@ -101,7 +107,8 @@ class UnitController:
 
     def create_candidate_sequences(self, pos: np.array, rewarded_actions: List[RewardedAction],
                                    unit_coordination_handler: UnitCoordinationHandler,
-                                   occupancy_map: np.array, unit_id: str) -> List[List[Tuple[int, int]]]:
+                                   occupancy_map: np.array, unit_id: str, prev_action: ActionType, prev_pos: np.array) -> List[
+        List[Tuple[int, int]]]:
         if len(rewarded_actions) == 0:
             return [[]]
 
@@ -109,14 +116,18 @@ class UnitController:
         discount_map = 1 - distance_map / (2 * MAP_SIZE)
 
         cur_action_type = rewarded_actions[0]
-        discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1, 0) * discount_map
+        discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1,
+                                         0) * discount_map
+        if prev_action == cur_action_type:
+            discounted_reward_map[prev_pos[0], prev_pos[1]] = 0
 
         candidate_sequences = []
         candidates = find_top_n(self.beam_width, discounted_reward_map)
         for candidate in candidates:
             candidate_sequences += [[(candidate[0], candidate[1])] + sequence for sequence in
                                     self.create_candidate_sequences(candidate, rewarded_actions[1:], unit_coordination_handler,
-                                                                    occupancy_map, unit_id)]
+                                                                    occupancy_map, unit_id, prev_action=cur_action_type,
+                                                                    prev_pos=np.array(candidate))]
         return candidate_sequences
 
     def calculate_optimal_action_sequence(self, unit: Unit,
@@ -134,7 +145,8 @@ class UnitController:
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
         # considered in the search
         position_sequences = self.create_candidate_sequences(unit.pos, rewarded_action_sequence,
-                                                             unit_coordination_handler, occupancy_map, unit.unit_id)
+                                                             unit_coordination_handler, occupancy_map, unit.unit_id, prev_action=None,
+                                                             prev_pos=None)
         best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
         for sequence in position_sequences:
             sequence = [(unit.pos[0], unit.pos[1])] + sequence
@@ -164,10 +176,8 @@ class UnitController:
                 segment_end_pos = segment_end_pos if len(waypoints) == 0 else waypoints[-1]
                 # TODO consider edge cases with self destruction
                 if following_rewarded_action == ActionType.PICKUP_POWER:
-                    available_power = unit_coordination_handler.get_actual_reward_map(action_type=ActionType.PICKUP_POWER)[
-                        segment_end_pos[0], segment_end_pos[1]]
-                    power_pickup = min(battery_capacity, available_power * 0.5)
-                    power_end = power_end + power_pickup
+                    power_pickup = self.calculate_power_pickup(battery_capacity, segment_end_pos, unit, unit_coordination_handler, power_end)
+                    power_end += power_pickup
                 power_start = power_end
             else:
                 power_for_digging = self._power_for_digging(power_profiles=power_profiles,
@@ -175,7 +185,7 @@ class UnitController:
                 safety_moves = 2  # TODO collect free parameters in central place
                 power_for_digging -= safety_moves * move_costs
                 if power_for_digging < digging_costs and (
-                        ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence):
+                        ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence or ActionType.DIG in rewarded_action_sequence):
                     continue
 
                 # build sequence
@@ -187,23 +197,31 @@ class UnitController:
                 for (waypoints, power_profile, following_rewarded_action) in zip(segment_waypoints, power_profiles,
                                                                                  rewarded_action_sequence):
                     action_items += self._translate_waypoints_to_actions(start=cur_pos, waypoints=waypoints,
-                                                                         occupancy_map=occupancy_map)  # TODO care for collisions
-                    # TODO compute repeat variable and set it in the action item afterwards would be better. Should be found by optimization
-                    # over the reward function
+                                                                         occupancy_map=occupancy_map)
+
                     cur_pos = waypoints[-1] if len(waypoints) > 0 else cur_pos
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs)
                         cur_ore += repeat * digging_speed
+
                     if following_rewarded_action is ActionType.MINE_ICE:
-                        repeat = math.floor(power_for_digging / digging_costs)  # repeat refers to the number of additional actions
+                        repeat = math.floor(power_for_digging / digging_costs)
                         cur_ice += repeat * digging_speed
 
+                    if following_rewarded_action is ActionType.DIG:
+                        max_repeat = math.floor(power_for_digging / digging_costs)
+                        repeat = min(math.ceil(rubble_map[cur_pos[0], cur_pos[1]] / digging_speed), max_repeat)
+                        if repeat <= 0:
+                            action_items = []
+                            reward = -1_000_000_000
+                            break
+
+                        power_for_digging -= repeat * digging_costs
+
                     if following_rewarded_action is ActionType.PICKUP_POWER:
-                        available_power = unit_coordination_handler.get_actual_reward_map(action_type=ActionType.PICKUP_POWER)[
-                            segment_end_pos[0], segment_end_pos[1]]
-                        amount = min(battery_capacity, available_power * 0.5)
+                        amount = self.calculate_power_pickup(battery_capacity, cur_pos, unit, unit_coordination_handler, power_profile[-1])
 
                     rewarded_action = ActionItem(type=following_rewarded_action, position=np.array(cur_pos),
                                                  repeat=repeat, direction=Direction.CENTER, amount=amount)
@@ -216,7 +234,6 @@ class UnitController:
                     action_items.append(rewarded_action)
 
                 # TODO compute remaining rewards, should be done in calculate_reward()
-                reward -= len(action_items) * 5  # TODO this is a hack to make the robot not do too many actions
                 action_sequence = ActionSequence(action_items=action_items, reward=reward, remaining_rewards=[0])
 
                 if action_sequence.estimate_lux_action_queue_length() < 20:
@@ -224,6 +241,17 @@ class UnitController:
                         best_action_sequence = action_sequence
 
         return best_action_sequence
+
+    @staticmethod
+    def calculate_power_pickup(battery_capacity, segment_end_pos, unit, unit_coordination_handler, cur_power):
+        available_power = unit_coordination_handler.get_actual_reward_map(action_type=ActionType.PICKUP_POWER)[
+            segment_end_pos[0], segment_end_pos[1]]
+
+        max_power_pickup = battery_capacity - cur_power
+        power_pickup = min(max_power_pickup, available_power * 0.5) if unit.unit_type == 'HEAVY' else min(
+            battery_capacity, available_power * 0.1)
+
+        return power_pickup
 
     @staticmethod
     def _build_day_night_cycle():
@@ -245,6 +273,8 @@ class UnitController:
             return unit_coordination_handler.get_reward_map(ActionType.TRANSFER_ICE)[x, y] * cur_ice
         if action_type is ActionType.PICKUP_POWER:
             return 0.001 * amount_power
+        if action_type is ActionType.DIG:
+            return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.2
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0
@@ -276,11 +306,8 @@ class UnitController:
     @staticmethod
     def _power_for_digging(power_profiles: List[np.array], rewarded_action_sequence: List[RewardedAction]):
         try:
-            digging_idx = rewarded_action_sequence.index(ActionType.MINE_ICE)
+            power_idx = rewarded_action_sequence.index(ActionType.PICKUP_POWER)
         except ValueError:
-            try:
-                digging_idx = rewarded_action_sequence.index(ActionType.MINE_ORE)
-            except ValueError:
-                return 0
+            return np.min(np.concatenate(power_profiles))
 
-        return np.min(np.concatenate(power_profiles[digging_idx + 1:]))
+        return np.min(np.concatenate(power_profiles[power_idx + 1:]))

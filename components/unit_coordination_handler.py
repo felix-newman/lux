@@ -170,7 +170,7 @@ class UnitCoordinationHandler:
 
     def initialize_unit_reward_handler(self, game_state: ExtendedGameState):
         for action_type in rewarded_actions:
-            self.reward_action_handler[action_type] = self._build_reward_action_masks(action_type, game_state)
+            self.reward_action_handler[action_type] = self._build_reward_action_handler(action_type, game_state)
 
     def get_reward_mask(self, action_type: ActionType) -> np.array:
         return self.reward_action_handler[action_type].actual_reward_mask
@@ -186,41 +186,48 @@ class UnitCoordinationHandler:
 
         return self.reward_action_handler[action_type].actual_reward_map
 
-    def update_reward_handler(self, action_type: RewardedAction, reward_map: np.array,
-                              future_discount_factor: np.array):
-        raise NotImplemented
+    def update_reward_handler(self, action_type: RewardedAction, reward_map: np.array, reward_mask: np.array):
+        self.reward_action_handler[action_type].reward_map = reward_map
+        self.reward_action_handler[action_type]._reward_mask = reward_mask
 
     def update_factory_rewards(self, action_type: RewardedAction, value: float, factory: Factory):
         self.reward_action_handler[action_type].reward_map[factory.pos_slice] = value
 
     @staticmethod
-    def _build_reward_action_masks(action_type: RewardedAction,
-                                   game_state: ExtendedGameState) -> RewardActionHandler:
+    def _build_reward_action_handler(action_type: RewardedAction,
+                                     game_state: ExtendedGameState) -> RewardActionHandler:
         if action_type is ActionType.MINE_ICE:
-            reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.board.ice
-            reward_action_mask.reward_map = game_state.board.ice
-            return reward_action_mask
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.board.ice
+            reward_action_handler.reward_map = game_state.board.ice
+            return reward_action_handler
 
         elif action_type is ActionType.MINE_ORE:
-            reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.board.ore
-            reward_action_mask.reward_map = game_state.board.ore
-            return reward_action_mask
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.board.ore
+            reward_action_handler.reward_map = game_state.board.ore
+            return reward_action_handler
         elif action_type is ActionType.TRANSFER_ICE:
-            reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.player_factories * 10
-            reward_action_mask.reward_map = game_state.player_factories * 10
-            return reward_action_mask
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.player_factories * 10
+            reward_action_handler.reward_map = game_state.player_factories * 10
+            return reward_action_handler
         elif action_type is ActionType.TRANSFER_ORE:
-            reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.player_factories * 10
-            reward_action_mask.reward_map = game_state.player_factories * 10
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.player_factories * 10
+            reward_action_handler.reward_map = game_state.player_factories * 10
 
-            return reward_action_mask
+            return reward_action_handler
         elif action_type is ActionType.PICKUP_POWER:
-            reward_action_mask = RewardActionHandler(action_type)
-            reward_action_mask._reward_mask = game_state.player_factories * 1000
-            reward_action_mask.reward_map = game_state.player_factories
-
-            return reward_action_mask
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = game_state.player_factories * 1000
+            reward_action_handler.reward_map = game_state.player_factories
+            return reward_action_handler
+        elif action_type is ActionType.DIG:
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = np.ones(
+                (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0, 1, 0)
+            reward_action_handler.reward_map = (np.ones(
+                (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
+                                                                                               1, 0)) * game_state.board.rubble
+            return reward_action_handler

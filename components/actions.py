@@ -18,6 +18,7 @@ class ActionType(Enum):
     MOVE_DOWN = 7
     MOVE_RIGHT = 8
     MOVE_LEFT = 9
+    DIG = 10
 
     @property
     def is_factory_action(self) -> bool:
@@ -33,11 +34,13 @@ class ActionType(Enum):
 
 
 factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE, ActionType.PICKUP_POWER}
+move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
+                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER}
+                                     ActionType.PICKUP_POWER, ActionType.DIG}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER]
+ActionType.PICKUP_POWER, ActionType.DIG]
 
 
 class Direction(Enum):
@@ -81,6 +84,8 @@ class ActionItem:
         if self.type == ActionType.MINE_ICE:
             return np.array([3, 0, 0, 0, 0, self.repeat])
         if self.type == ActionType.MINE_ORE:
+            return np.array([3, 0, 0, 0, 0, self.repeat])
+        if self.type == ActionType.DIG:
             return np.array([3, 0, 0, 0, 0, self.repeat])
 
         if self.type == ActionType.TRANSFER_ICE:  # TODO amount currently hardcoded

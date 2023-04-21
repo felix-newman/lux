@@ -1,9 +1,10 @@
 import sys
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 
 from components.actions import ActionSequence, ActionType
+from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitRole, UnitMetadata
 from components.factory_placement import compute_factory_value_map
@@ -27,6 +28,7 @@ class Agent():
         self.unit_coordination_handler = UnitCoordinationHandler(self_player=self.player)
 
         self.tracked_units: Dict[str, UnitMetadata] = dict()
+        self.role_switches: List[str] = list()
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if step == 0:
@@ -101,8 +103,22 @@ class Agent():
             if unit_meta.last_action == ActionType.PICKUP_POWER:
                 self.unit_coordination_handler.clean_up_action_type(unit_id=unit_id, action_type=ActionType.PICKUP_POWER)
 
+        for unit_id in self.role_switches:
+            unit = self.tracked_units.get(unit_id)
+            if unit is not None:
+                if self.tracked_units[unit_id].role == UnitRole.MINER:
+                    self.tracked_units[unit_id].role = UnitRole.DIGGER
+                # elif self.tracked_units[unit_id].role == UnitRole.DIGGER:
+                #     self.tracked_units[unit_id].role = UnitRole.MINER
+
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             self.unit_coordination_handler.update_factory_rewards(ActionType.PICKUP_POWER, value=factory.power, factory=factory)
+
+        new_dig_reward_map = (np.ones(
+                (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
+                                                                                               1, 0)) * game_state.board.rubble
+        new_dig_reward_mask = np.where(new_dig_reward_map > 0, 1, 0)
+        self.unit_coordination_handler.update_reward_handler(ActionType.DIG, new_dig_reward_map, new_dig_reward_mask)
 
         # update unit action sequences
         sorted_units = sorted(self.tracked_units.items(), key=lambda x: 1 if x[1].unit_type == 'HEAVY' else 0, reverse=True)
@@ -119,11 +135,11 @@ class Agent():
 
                 lux_action_queue = unit_meta.cur_action_sequence.to_lux_action_queue()
                 actions[unit_id] = lux_action_queue
+                print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
 
                 next_action = lux_action_queue[0]
                 self.unit_coordination_handler.register_lux_action_for_collision(next_action, unit.pos, unit_id)
 
-                # print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
             else:
                 # print(f"No action queue update for {unit_id}", file=sys.stderr)
                 if len(unit.action_queue) > 0:
@@ -134,8 +150,7 @@ class Agent():
                     self.unit_coordination_handler.mark_field_as_occupied(unit.pos[0], unit.pos[1], unit_id)
 
             if role_change_requested:
-                # TODO implement role change
-                continue
+                self.role_switches.append(unit_id)
         print(f"Step: {step} Actions: {actions}", file=sys.stderr)
 
         for unit_id, unit in game_state.game_state.units[self.player].items():
