@@ -4,6 +4,7 @@ from typing import List, Set
 from typing_extensions import Literal
 
 import numpy as np
+import copy
 
 
 class ActionType(Enum):
@@ -114,10 +115,18 @@ class ActionSequence:
         lux_actions = []
         if self.empty:
             return []
-        cur_item = self.action_items[0]
-        for item in self.action_items[1:]:
+        items = copy.deepcopy(self.action_items)  # create a copy of action_items
+        cur_item = items.pop(0)
+        for item in items:
             if item.type == cur_item.type:
-                cur_item.repeat += item.repeat
+                if item.type in move_actions:
+                    cur_item.repeat += item.repeat
+                else:
+                    if item.position[0] == cur_item.position[0] and item.position[1] == cur_item.position[1]:
+                        cur_item.repeat += item.repeat
+                    else:
+                        lux_actions.append(cur_item.to_lux_action())
+                        cur_item = item
             else:
                 lux_actions.append(cur_item.to_lux_action())
                 cur_item = item
