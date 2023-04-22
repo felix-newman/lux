@@ -53,7 +53,6 @@ def get_path(start, end) -> List[Tuple[int, int]]:
     abs_dx, abs_dy = abs(dx), abs(dy)
     x_step = 1 if dx > 0 else -1
     y_step = 1 if dy > 0 else -1
-    max_delta = max(abs_dx, abs_dy)
     for i in range(abs_dx):
         x += x_step
         path.append((x, y))
@@ -61,6 +60,38 @@ def get_path(start, end) -> List[Tuple[int, int]]:
         y += y_step
         path.append((x, y))
     return path
+
+def get_cheapest_path(start, end, cost_map: np.array) -> List[Tuple[int, int]]:
+    """Returns a list of points that connects the start and endpoint. Does not contain the start point."""
+    path_1 = []
+    x, y = start
+    dx, dy = end[0] - x, end[1] - y
+    abs_dx, abs_dy = abs(dx), abs(dy)
+    x_step = 1 if dx > 0 else -1
+    y_step = 1 if dy > 0 else -1
+    for i in range(abs_dx):
+        x += x_step
+        path_1.append((x, y))
+    for i in range(abs_dy):
+        y += y_step
+        path_1.append((x, y))
+
+    path_2 = []
+    x, y = start
+    for i in range(abs_dy):
+        y += y_step
+        path_2.append((x, y))
+    for i in range(abs_dx):
+        x += x_step
+        path_2.append((x, y))
+
+    cost_profile_1 = get_cost_profile(np.array(path_1), cost_map)
+    cost_profile_2 = get_cost_profile(np.array(path_2), cost_map)
+
+    if sum(cost_profile_1) < sum(cost_profile_2):
+        return path_1
+    else:
+        return path_2
 
 
 def find_collision_path(mask: np.array, start, end) -> List[Tuple[int, int]]:
