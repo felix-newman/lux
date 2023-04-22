@@ -104,7 +104,7 @@ class UnitCoordinationHandler:
         pos = get_position_after_lux_action(lux_action, cur_pos)
         self.mark_field_as_occupied(pos[0], pos[1], unit_id)
 
-    def grant_rewards(self, unit_id: str, action_sequence: ActionSequence):
+    def grant_rewards(self, unit_id: str, action_sequence: ActionSequence, game_state: ExtendedGameState):
         """
         First cleans all references to this unit, then updates the reward maps for the different actions and computes a
         reference to all modifications of this unit in order to be able to roll it back properly
@@ -112,7 +112,7 @@ class UnitCoordinationHandler:
 
         self.clean_up_unit(unit_id)
 
-        reward_masks, reward_maps = self._build_unit_reward_masks(action_sequence)
+        reward_masks, reward_maps = self._build_unit_reward_masks(action_sequence, game_state)
 
         reference = UnitReference(reward_masks=reward_masks, reward_maps=reward_maps)
         for action_type in reference.reward_masks.keys():
@@ -122,7 +122,7 @@ class UnitCoordinationHandler:
         self.references[unit_id] = reference
 
     @staticmethod
-    def _build_unit_reward_masks(action_sequence: ActionSequence) -> Tuple[Dict[RewardedAction, np.array], Dict[RewardedAction, np.array]]:
+    def _build_unit_reward_masks(action_sequence: ActionSequence, game_state: ExtendedGameState) -> Tuple[Dict[RewardedAction, np.array], Dict[RewardedAction, np.array]]:
         """
         Go through all actions in action sequence and build a reward_mask for all of them. Items of the same action type
         can occur multiple times, therefore masks have to be updated if they already exist for one type.
@@ -135,11 +135,12 @@ class UnitCoordinationHandler:
 
             mask = np.zeros((MAP_SIZE, MAP_SIZE))
             reward_map = np.zeros((MAP_SIZE, MAP_SIZE))
-            x, y = item.position
             if item.type.is_factory_action:
-                mask[x - 1:x + 2, y - 1: y + 2] = 1
-                reward_map[x - 1:x + 2, y - 1: y + 2] = item.reward
+                factory_slice = game_state.get_factory_slice_at_position(item.position)
+                mask[factory_slice] = 1
+                reward_map[factory_slice] = item.reward
             else:
+                x, y = item.position
                 mask[x, y] = 1
                 reward_map[x, y] = item.reward
 
@@ -209,12 +210,12 @@ class UnitCoordinationHandler:
             return reward_action_handler
         elif action_type is ActionType.TRANSFER_ICE:
             reward_action_handler = RewardActionHandler(action_type)
-            reward_action_handler._reward_mask = game_state.player_factories * 10
+            reward_action_handler._reward_mask = game_state.player_factories * 2
             reward_action_handler.reward_map = game_state.player_factories * 10
             return reward_action_handler
         elif action_type is ActionType.TRANSFER_ORE:
             reward_action_handler = RewardActionHandler(action_type)
-            reward_action_handler._reward_mask = game_state.player_factories * 10
+            reward_action_handler._reward_mask = game_state.player_factories * 2
             reward_action_handler.reward_map = game_state.player_factories * 10
 
             return reward_action_handler

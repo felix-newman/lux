@@ -133,7 +133,7 @@ class Agent():
                                                                                               game_state=game_state)
 
             if not action_sequence.empty:
-                self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence)
+                self.unit_coordination_handler.grant_rewards(unit_id=unit_id, action_sequence=action_sequence, game_state=game_state)
                 unit_meta.cur_action_sequence = action_sequence
 
                 lux_action_queue = unit_meta.cur_action_sequence.to_lux_action_queue()

@@ -18,6 +18,12 @@ class ExtendedGameState:
 
         return player_factories
 
+    def get_factory_slice_at_position(self, position: np.array) -> np.array:
+        for _, factory in self.game_state.factories[self.player].items():
+            if factory.pos[0] - 1 <= position[0] <= factory.pos[0] + 1 and factory.pos[1] - 1 <= position[1] <= factory.pos[1] + 1:
+                return factory.pos_slice
+        return None
+
     @property
     def board(self) -> Board:
         return self.game_state.board
