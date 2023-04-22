@@ -22,6 +22,7 @@ class RewardSequenceCalculator:
         valid_reward_sequences = [
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
             [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
+            [ActionType.RECHARGE, ActionType.RETURN]
         ]
 
         if unit.cargo.ice > 0:
@@ -43,6 +44,7 @@ class RewardSequenceCalculator:
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
             [ActionType.DIG, ActionType.DIG, ActionType.RETURN],
+            [ActionType.RECHARGE, ActionType.RETURN]
         ]
 
         return valid_reward_sequences

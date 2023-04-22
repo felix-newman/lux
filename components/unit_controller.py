@@ -9,9 +9,9 @@ from components.actions import ActionSequence, ActionItem, ActionType, Direction
     rewarded_actions_from_lux_action_queue
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
-from components.extended_unit import UnitRole, UnitMetadata
+from components.extended_unit import UnitMetadata
 from components.unit_coordination_handler import UnitCoordinationHandler
-from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_path, get_cheapest_path
+from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_cheapest_path
 from lux.unit import Unit
 
 
@@ -223,20 +223,24 @@ class UnitController:
 
                         power_for_digging -= repeat * digging_costs
 
+                    recharge_power = 0
                     if following_rewarded_action is ActionType.PICKUP_POWER:
                         amount = self.calculate_power_pickup(battery_capacity, cur_pos, unit, unit_coordination_handler, power_profile[-1])
+                    elif following_rewarded_action is ActionType.RECHARGE:
+                        recharge_pwoer = move_costs * 5
+                        amount = min(battery_capacity, power_profile[-1] + recharge_pwoer)
+
 
                     rewarded_action = ActionItem(type=following_rewarded_action, position=np.array(cur_pos),
                                                  repeat=repeat, direction=Direction.CENTER, amount=amount)
 
                     new_reward = self.calculate_reward(action_item=rewarded_action, cur_ice=cur_ice, cur_ore=cur_ore,
                                                        unit_coordination_handler=unit_coordination_handler,
-                                                       amount_power=amount)
+                                                       amount_power=amount, recharge_power=recharge_power)
                     rewarded_action.reward = new_reward
                     reward += new_reward
                     action_items.append(rewarded_action)
 
-                reward -= len(action_items) * 3
                 action_sequence = ActionSequence(action_items=action_items, reward=reward, remaining_rewards=[0])
 
                 if action_sequence.estimate_lux_action_queue_length() < 20:
@@ -262,7 +266,7 @@ class UnitController:
 
     @staticmethod
     def calculate_reward(action_item: ActionItem, unit_coordination_handler: UnitCoordinationHandler, cur_ice: int, cur_ore: int,
-                         amount_power: int) -> float:
+                         amount_power: int, recharge_power: int) -> float:
         action_type = action_item.type
         x, y = action_item.position
 
@@ -275,12 +279,13 @@ class UnitController:
         if action_type is ActionType.TRANSFER_ICE:
             return unit_coordination_handler.get_reward_map(ActionType.TRANSFER_ICE)[x, y] * cur_ice
         if action_type is ActionType.PICKUP_POWER:
-            return -0.01 * amount_power
-        if action_type is ActionType.DIG:
-            # return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.01
             return 0
+        if action_type is ActionType.DIG:
+            return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.2
         if action_type is ActionType.RETURN:
             return 0
+        if action_type is ActionType.RECHARGE:
+            return recharge_power*0.0001
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0

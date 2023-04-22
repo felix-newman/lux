@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -137,6 +138,9 @@ class UnitCoordinationHandler:
             reward_map = np.zeros((MAP_SIZE, MAP_SIZE))
             if item.type.is_factory_action:
                 factory_slice = game_state.get_factory_slice_at_position(item.position)
+                if factory_slice is None:
+                    print("No factory at position", item.position, file = sys.stderr)
+                    continue
                 mask[factory_slice] = 1
                 reward_map[factory_slice] = item.reward
             else:
@@ -236,4 +240,10 @@ class UnitCoordinationHandler:
             reward_action_handler = RewardActionHandler(action_type)
             reward_action_handler._reward_mask = game_state.player_factories * 1000
             reward_action_handler.reward_map = game_state.player_factories
+            return reward_action_handler
+
+        elif action_type is ActionType.RECHARGE:
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = np.ones((MAP_SIZE, MAP_SIZE))
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
             return reward_action_handler

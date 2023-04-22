@@ -20,6 +20,7 @@ class ActionType(Enum):
     MOVE_LEFT = 9
     DIG = 10
     RETURN = 11
+    RECHARGE = 12
 
     @property
     def is_factory_action(self) -> bool:
@@ -38,10 +39,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE]
 
 
 class Direction(Enum):
@@ -77,6 +78,7 @@ class ActionItem:
             ActionType.MOVE_LEFT: "L",
             ActionType.DIG: "DG",
             ActionType.RETURN: "RT",
+            ActionType.RECHARGE: "RC",
         }
 
         return f"({abbrev[self.type]}, {self.repeat})"
@@ -118,6 +120,9 @@ class ActionItem:
         if self.type == ActionType.RETURN:
             return None
 
+        if self.type == ActionType.RECHARGE:
+            return np.array([5, 0, 4, int(self.amount), 0, 1])
+
 
 @dataclass
 class ActionSequence:
@@ -140,7 +145,6 @@ class ActionSequence:
         cur_length += 1
         return cur_length
 
-    # TODO bug fix needed
     def to_lux_action_queue(self) -> List[np.array]:
         lux_actions = []
         if self.empty:
@@ -197,6 +201,9 @@ def rewarded_actions_from_lux_action_queue(action_queue: List[np.array]) -> List
 
         if lux_action[0] == 2:
             return ActionType.PICKUP_POWER, None
+
+        if lux_action[0] == 5:
+            return ActionType.RECHARGE, None
 
         else:
             return None, None
