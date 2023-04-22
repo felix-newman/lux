@@ -4,28 +4,21 @@ from typing import List, Tuple
 
 import numpy as np
 
+from components.RewardSequenceCalculator import RewardSequenceCalculator
 from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS, \
     rewarded_actions_from_lux_action_queue
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitRole, UnitMetadata
 from components.unit_coordination_handler import UnitCoordinationHandler
-from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_path
+from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_path, get_cheapest_path
 from lux.unit import Unit
 
 
 class UnitController:
     def __init__(self, beam_width=1):
         """Precompute the allowed reward action sequences for all unit roles"""
-        self.valid_reward_sequences = dict()
-        self.valid_reward_sequences[UnitRole.MINER] = [
-            [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
-            [ActionType.PICKUP_POWER, ActionType.MINE_ORE, ActionType.TRANSFER_ORE],
-        ]
-        self.valid_reward_sequences[UnitRole.DIGGER] = [
-            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
-            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
-        ]
+        self.reward_sequence_calculator = RewardSequenceCalculator()
 
         self.beam_width = beam_width
         self.day_night_cycle = self._build_day_night_cycle()
@@ -92,7 +85,7 @@ class UnitController:
                                                 unit_coordination_handler: UnitCoordinationHandler,
                                                 real_env_step: int) -> ActionSequence:
 
-        valid_reward_sequences = self.valid_reward_sequences[unit_meta.role]
+        valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta)
 
         best_sequence = ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
         for sequence in valid_reward_sequences:
@@ -118,6 +111,9 @@ class UnitController:
         cur_action_type = rewarded_actions[0]
         discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1,
                                          0) * discount_map
+        if np.max(discounted_reward_map) == 0 and np.min(discounted_reward_map) == 0:
+            return []
+
         if prev_action is None:
             discounted_reward_map *= np.where(occupancy_map != 0, 0, 1)
 
@@ -147,15 +143,18 @@ class UnitController:
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
         # considered in the search
+        best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
         position_sequences = self.create_candidate_sequences(unit.pos, rewarded_action_sequence,
                                                              unit_coordination_handler, occupancy_map, unit.unit_id, prev_action=None,
                                                              prev_pos=None)
-        best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
+        position_sequences = [sequence for sequence in position_sequences if not None in sequence]
+        if len(position_sequences) == 0:
+            return best_action_sequence
         for sequence in position_sequences:
             sequence = [(unit.pos[0], unit.pos[1])] + sequence
             segments = list(zip(sequence, sequence[1:]))
             segment_waypoints = [find_collision_path(mask=occupancy_map, start=segments[0][0], end=segments[0][1])] + [
-                get_path(segment[0], segment[1]) for segment in segments[1:]]
+                get_cheapest_path(segment[0], segment[1], cost_map=rubble_map) for segment in segments[1:]]
             if segment_waypoints[0] is None or (
                     segment_waypoints[0] == [] and occupancy_map[unit.pos[0], unit.pos[1]] != 0):
                 continue
@@ -165,7 +164,7 @@ class UnitController:
             segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
                                      segment_cost_profiles]
             power_profiles = []
-            power_start = unit.power - 10 if unit.unit_type == 'HEAVY' else 1  # TODO cost for updating the action queue
+            power_start = unit.power - 10 if unit.unit_type == 'HEAVY' else unit.power - 1  # TODO cost for updating the action queue
             segment_end_pos = unit.pos
             for (cost_profile, following_rewarded_action, waypoints) in zip(segment_cost_profiles, rewarded_action_sequence,
                                                                             segment_waypoints):
@@ -207,11 +206,11 @@ class UnitController:
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = math.floor(power_for_digging / digging_costs)
+                        repeat = min(10, math.floor(power_for_digging / digging_costs))
                         cur_ore += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.MINE_ICE:
-                        repeat = math.floor(power_for_digging / digging_costs)
+                        repeat = min(10, math.floor(power_for_digging / digging_costs))
                         cur_ice += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.DIG:
@@ -237,7 +236,7 @@ class UnitController:
                     reward += new_reward
                     action_items.append(rewarded_action)
 
-                # TODO compute remaining rewards, should be done in calculate_reward()
+                reward -= len(action_items) * 3
                 action_sequence = ActionSequence(action_items=action_items, reward=reward, remaining_rewards=[0])
 
                 if action_sequence.estimate_lux_action_queue_length() < 20:
@@ -253,7 +252,7 @@ class UnitController:
 
         max_power_pickup = battery_capacity - cur_power
         power_pickup = min(max_power_pickup, available_power * 0.5) if unit.unit_type == 'HEAVY' else min(
-            battery_capacity, available_power * 0.1)
+            battery_capacity, available_power * 0.05)
 
         return power_pickup
 
@@ -276,9 +275,10 @@ class UnitController:
         if action_type is ActionType.TRANSFER_ICE:
             return unit_coordination_handler.get_reward_map(ActionType.TRANSFER_ICE)[x, y] * cur_ice
         if action_type is ActionType.PICKUP_POWER:
-            return 0.001 * amount_power
+            return -0.01 * amount_power
         if action_type is ActionType.DIG:
-            return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.2
+            # return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.01
+            return 0
         if action_type is ActionType.RETURN:
             return 0
         else:
