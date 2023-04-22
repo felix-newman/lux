@@ -47,4 +47,4 @@ def compute_factory_value_map(game_state: GameState, dig_speed=5, steps=5):
     ore_score_map = normalize_matrix(96 - ore_distance)
     lichen_score_map = normalize_matrix(lichen_potential)
 
-    return 4 * ice_score_map + lichen_score_map + ore_score_map
+    return 4 * ice_score_map + ore_score_map
