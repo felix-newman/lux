@@ -12,9 +12,9 @@ def animate(images: List[np.array], fps: int = 2, name: str = "my_video") -> Non
     clip.write_videofile(f"videos/{name}.mp4")
 
 
-def interact(env, agents, steps):
+def interact(env, agents, steps, seed):
     # reset our env
-    obs = env.reset(seed=41)
+    obs = env.reset(seed=seed)
     np.random.seed(0)
     imgs = []
     step = 0
