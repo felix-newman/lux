@@ -63,6 +63,24 @@ DIRECTION_DELTAS = {
 
 @dataclass
 class ActionItem:
+    def __str__(self):
+        abbrev = {
+            ActionType.MINE_ICE: "MI",
+            ActionType.MINE_ORE: "MO",
+            ActionType.TRANSFER_ICE: "TI",
+            ActionType.TRANSFER_ORE: "TO",
+            ActionType.PICKUP_POWER: "PP",
+            ActionType.MOVE_CENTER: "C",
+            ActionType.MOVE_UP: "U",
+            ActionType.MOVE_DOWN: "D",
+            ActionType.MOVE_RIGHT: "R",
+            ActionType.MOVE_LEFT: "L",
+            ActionType.DIG: "DG",
+            ActionType.RETURN: "RT",
+        }
+
+        return f"({abbrev[self.type]}, {self.repeat})"
+
     type: ActionType
     direction: Direction
     repeat: int
@@ -106,6 +124,9 @@ class ActionSequence:
     action_items: List[ActionItem]
     remaining_rewards: List[int]
     reward: int = 0
+
+    def __str__(self):
+        return "".join([str(item) for item in self.action_items])
 
     def estimate_lux_action_queue_length(self) -> int:
         cur_length = 0
