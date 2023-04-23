@@ -33,20 +33,17 @@ class UnitController:
                                                                            game_state.board.rubble,
                                                                            unit_coordination_handler=unit_coordination_handler,
                                                                            real_env_step=game_state.real_env_steps)
-            if action_sequence.empty:
-                action_sequence = self.move_unit_to_closest_free_square(unit, unit_coordination_handler)
-                return action_sequence, True
             return action_sequence, False
 
         next_action = unit.action_queue[0]
         if unit_coordination_handler.collision_after_lux_action(next_action, unit.pos, unit_id):
             unit_coordination_handler.clean_up_unit(unit_id)
-            rewarded_actions = rewarded_actions_from_lux_action_queue(unit.action_queue)
-            action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=rewarded_actions,
-                                                                     unit_coordination_handler=unit_coordination_handler,
-                                                                     rubble_map=game_state.board.rubble,
-                                                                     occupancy_map=unit_coordination_handler.occupancy_map,
-                                                                     real_env_step=game_state.real_env_steps)
+            rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta)
+            action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
+                                                             unit_coordination_handler=unit_coordination_handler,
+                                                             rubble_map=game_state.board.rubble,
+                                                             occupancy_map=unit_coordination_handler.occupancy_map,
+                                                             real_env_step=game_state.real_env_steps)
             if action_sequence.empty:
                 action_sequence = self.move_unit_to_closest_free_square(unit, unit_coordination_handler)
                 return action_sequence, True
@@ -87,15 +84,21 @@ class UnitController:
 
         valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta)
 
+        best_sequence = self.evaluate_reward_sequences(occupancy_map, real_env_step, rubble_map, unit, unit_coordination_handler,
+                                                       valid_reward_sequences)
+
+        return best_sequence
+
+    def evaluate_reward_sequences(self, occupancy_map: np.array, real_env_step: int, rubble_map: np.array, unit: Unit,
+                                  unit_coordination_handler: UnitCoordinationHandler, reward_sequences: List[List[RewardedAction]]):
         best_sequence = ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
-        for sequence in valid_reward_sequences:
+        for sequence in reward_sequences:
             action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=sequence,
                                                                      unit_coordination_handler=unit_coordination_handler,
                                                                      rubble_map=rubble_map,
                                                                      occupancy_map=occupancy_map, real_env_step=real_env_step)
             if action_sequence.reward > best_sequence.reward:
                 best_sequence = action_sequence
-
         return best_sequence
 
     def create_candidate_sequences(self, pos: np.array, rewarded_actions: List[RewardedAction],
@@ -135,6 +138,7 @@ class UnitController:
                                           rubble_map: np.array, occupancy_map: np.array,
                                           real_env_step: int) -> ActionSequence:
         unit_charge = 10 if unit.unit_type == 'HEAVY' else 1  # TODO import constant here
+        eff_unit_charge = unit_charge * 0.6
         move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
         digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
         digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
@@ -164,12 +168,12 @@ class UnitController:
             segment_cost_profiles = [transform_cost_profile(cost_profile, unit_type=unit.unit_type) for cost_profile in
                                      segment_cost_profiles]
             power_profiles = []
-            power_start = unit.power - 10 if unit.unit_type == 'HEAVY' else unit.power - 1  # TODO cost for updating the action queue
+            power_start = unit.power - 10 if unit.unit_type == 'HEAVY' else unit.power - 1  # cost for updating the action queue
             segment_end_pos = unit.pos
             for (cost_profile, following_rewarded_action, waypoints) in zip(segment_cost_profiles, rewarded_action_sequence,
                                                                             segment_waypoints):
                 power_profile = power_start + np.cumsum(
-                    -cost_profile + unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
+                    -cost_profile + eff_unit_charge * self.day_night_cycle[real_env_step:real_env_step + cost_profile.shape[0]])
                 if np.any(power_profile < 0):
                     break
                 power_profiles.append(power_profile)
@@ -230,7 +234,6 @@ class UnitController:
                         recharge_pwoer = move_costs * 5
                         amount = min(battery_capacity, power_profile[-1] + recharge_pwoer)
 
-
                     rewarded_action = ActionItem(type=following_rewarded_action, position=np.array(cur_pos),
                                                  repeat=repeat, direction=Direction.CENTER, amount=amount)
 
@@ -285,7 +288,7 @@ class UnitController:
         if action_type is ActionType.RETURN:
             return 0
         if action_type is ActionType.RECHARGE:
-            return recharge_power*0.0001
+            return recharge_power * 0.0001
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0

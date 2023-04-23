@@ -21,6 +21,7 @@ class ActionType(Enum):
     DIG = 10
     RETURN = 11
     RECHARGE = 12
+    FIGHT = 13
 
     @property
     def is_factory_action(self) -> bool:
@@ -39,10 +40,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT]
 
 
 class Direction(Enum):
@@ -79,6 +80,7 @@ class ActionItem:
             ActionType.DIG: "DG",
             ActionType.RETURN: "RT",
             ActionType.RECHARGE: "RC",
+            ActionType.FIGHT: "F",
         }
 
         return f"({abbrev[self.type]}, {self.repeat})"
@@ -109,7 +111,7 @@ class ActionItem:
         if self.type == ActionType.DIG:
             return np.array([3, 0, 0, 0, 0, self.repeat])
 
-        if self.type == ActionType.TRANSFER_ICE:  # TODO amount currently hardcoded
+        if self.type == ActionType.TRANSFER_ICE:
             return np.array([1, int(self.direction.value), 0, 3000, 0, self.repeat])
         if self.type == ActionType.TRANSFER_ORE:
             return np.array([1, int(self.direction.value), 1, 3000, 0, self.repeat])
@@ -118,6 +120,8 @@ class ActionItem:
             return np.array([2, 0, 4, int(self.amount), 0, self.repeat])
 
         if self.type == ActionType.RETURN:
+            return None
+        if self.type == ActionType.FIGHT:
             return None
 
         if self.type == ActionType.RECHARGE:

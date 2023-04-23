@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 import numpy as np
+from scipy.ndimage import binary_dilation
 
 from components.actions import ActionSequence, RewardedAction, rewarded_actions, ActionType
 from components.constants import MAP_SIZE
@@ -19,6 +20,23 @@ class UnitReference:
 
     def get_reward_positions(self, action_type: RewardedAction) -> np.array:
         return np.argwhere(self.reward_masks[action_type] == 1)
+
+
+class EnemyMap:
+    def __init__(self, opp_player: str):
+        self.enemy_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
+        self.power_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
+        self.opp_player = opp_player
+        self.fight_map = np.zeros((MAP_SIZE, MAP_SIZE))
+
+    def update(self, game_state: ExtendedGameState):
+        self.enemy_map = np.zeros((MAP_SIZE, MAP_SIZE))
+        self.power_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
+        for _, unit in game_state.game_state.units[self.opp_player].items():
+            self.enemy_map[unit.pos[0], unit.pos[1]] = 1 if unit.unit_type == 'LIGHT' else 2
+            self.power_map[unit.pos[0], unit.pos[1]] = unit.power
+
+        self.fight_map = binary_dilation(self.enemy_map) * 1000
 
 
 class RewardActionHandler:
@@ -72,10 +90,11 @@ class RewardActionHandler:
 
 
 class UnitCoordinationHandler:
-    def __init__(self, self_player: str):
+    def __init__(self, self_player: str, opp_player: str):
         self.references: Dict[str, UnitReference] = dict()
         self.occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
         self.reward_action_handler: Dict[RewardedAction, RewardActionHandler] = dict()
+        self.enemy_map: EnemyMap = EnemyMap(opp_player=opp_player)
 
         self.self_player = self_player
 
@@ -89,6 +108,10 @@ class UnitCoordinationHandler:
         if 0 < x < MAP_SIZE and 0 < y < MAP_SIZE:
             unit_number = int(unit_id.split("_")[1])
             self.occupancy_map[x, y] = unit_number
+
+    def update_enemy_map(self, game_state: ExtendedGameState):
+        self.enemy_map.update(game_state)
+        self.reward_action_handler[ActionType.FIGHT]._reward_mask = self.enemy_map.fight_map
 
     def check_field_occupied(self, x: int, y: int, unit_id: str) -> bool:
         if 0 < x < MAP_SIZE and 0 < y < MAP_SIZE:
@@ -123,7 +146,8 @@ class UnitCoordinationHandler:
         self.references[unit_id] = reference
 
     @staticmethod
-    def _build_unit_reward_masks(action_sequence: ActionSequence, game_state: ExtendedGameState) -> Tuple[Dict[RewardedAction, np.array], Dict[RewardedAction, np.array]]:
+    def _build_unit_reward_masks(action_sequence: ActionSequence, game_state: ExtendedGameState) -> Tuple[
+        Dict[RewardedAction, np.array], Dict[RewardedAction, np.array]]:
         """
         Go through all actions in action sequence and build a reward_mask for all of them. Items of the same action type
         can occur multiple times, therefore masks have to be updated if they already exist for one type.
@@ -139,7 +163,7 @@ class UnitCoordinationHandler:
             if item.type.is_factory_action:
                 factory_slice = game_state.get_factory_slice_at_position(item.position)
                 if factory_slice is None:
-                    print("No factory at position", item.position, file = sys.stderr)
+                    print("No factory at position", item.position, file=sys.stderr)
                     continue
                 mask[factory_slice] = 1
                 reward_map[factory_slice] = item.reward
@@ -198,8 +222,7 @@ class UnitCoordinationHandler:
     def update_factory_rewards(self, action_type: RewardedAction, value: float, factory: Factory):
         self.reward_action_handler[action_type].reward_map[factory.pos_slice] = value
 
-    @staticmethod
-    def _build_reward_action_handler(action_type: RewardedAction,
+    def _build_reward_action_handler(self, action_type: RewardedAction,
                                      game_state: ExtendedGameState) -> RewardActionHandler:
         if action_type is ActionType.MINE_ICE:
             reward_action_handler = RewardActionHandler(action_type)
@@ -231,7 +254,8 @@ class UnitCoordinationHandler:
         elif action_type is ActionType.DIG:
             reward_action_handler = RewardActionHandler(action_type)
             reward_action_handler._reward_mask = np.ones(
-                (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0, 1, 0)
+                (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
+                                                                                               1, 0)
             reward_action_handler.reward_map = (np.ones(
                 (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
                                                                                                1, 0)) * game_state.board.rubble
@@ -245,5 +269,11 @@ class UnitCoordinationHandler:
         elif action_type is ActionType.RECHARGE:
             reward_action_handler = RewardActionHandler(action_type)
             reward_action_handler._reward_mask = np.ones((MAP_SIZE, MAP_SIZE))
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
+            return reward_action_handler
+
+        elif action_type is ActionType.FIGHT:
+            reward_action_handler = RewardActionHandler(action_type)
+            reward_action_handler._reward_mask = self.enemy_map.fight_map
             reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
             return reward_action_handler

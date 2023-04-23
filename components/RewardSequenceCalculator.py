@@ -17,7 +17,7 @@ class RewardSequenceCalculator:
     def calculate_miner_reward_sequences(unit: Unit):
         rewarded_actions = rewarded_actions_from_lux_action_queue(unit.action_queue)
         if len(rewarded_actions) > 0 and rewarded_actions != [ActionType.RETURN]:
-            return rewarded_actions
+            return [rewarded_actions]
 
         valid_reward_sequences = [
             [ActionType.PICKUP_POWER, ActionType.MINE_ICE, ActionType.TRANSFER_ICE],
@@ -38,7 +38,7 @@ class RewardSequenceCalculator:
     def calculate_digger_reward_sequences(unit: Unit):
         rewarded_actions = rewarded_actions_from_lux_action_queue(unit.action_queue)
         if len(rewarded_actions) > 0 and rewarded_actions != [ActionType.RETURN]:
-            return rewarded_actions
+            return [rewarded_actions]
 
         valid_reward_sequences = [
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
