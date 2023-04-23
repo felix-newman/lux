@@ -9,7 +9,7 @@ if __name__ == "__main__":
     obs = env.reset(seed=seed)  # resets an environment with a seed
 
     agents = {player: Agent(player, env.state.env_cfg) for player in env.agents}
-    imgs = interact(env, agents, 300, seed)
+    imgs = interact(env, agents, 400, seed)
 
     animate(imgs, fps=2, name="test")
 

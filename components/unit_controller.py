@@ -5,8 +5,7 @@ from typing import List, Tuple
 import numpy as np
 
 from components.RewardSequenceCalculator import RewardSequenceCalculator
-from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS, \
-    rewarded_actions_from_lux_action_queue
+from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitMetadata
@@ -29,25 +28,39 @@ class UnitController:
         if len(unit.action_queue) == 0:
             unit_coordination_handler.clean_up_unit(unit_id)
             action_sequence = self.find_optimally_rewarded_action_sequence(unit, unit_meta,
-                                                                           unit_coordination_handler.occupancy_map,
+                                                                           unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
                                                                            game_state.board.rubble,
                                                                            unit_coordination_handler=unit_coordination_handler,
                                                                            real_env_step=game_state.real_env_steps)
             return action_sequence, False
 
         next_action = unit.action_queue[0]
-        if unit_coordination_handler.collision_after_lux_action(next_action, unit.pos, unit_id):
+        if unit_coordination_handler.collision_after_lux_action(next_action, unit.pos, unit):
+
             unit_coordination_handler.clean_up_unit(unit_id)
-            rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta)
+            rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
+                                                                                               unit_coordination_handler=unit_coordination_handler)
             action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
                                                              unit_coordination_handler=unit_coordination_handler,
                                                              rubble_map=game_state.board.rubble,
-                                                             occupancy_map=unit_coordination_handler.occupancy_map,
+                                                             occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
                                                              real_env_step=game_state.real_env_steps)
             if action_sequence.empty:
                 action_sequence = self.move_unit_to_closest_free_square(unit, unit_coordination_handler)
                 return action_sequence, True
             else:
+                return action_sequence, False
+
+        if unit_coordination_handler.on_fight_field(unit.pos):
+            unit_coordination_handler.clean_up_unit(unit_id)
+            rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
+                                                                                               unit_coordination_handler=unit_coordination_handler)
+            if rewarded_actions is not None:
+                action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
+                                                                 unit_coordination_handler=unit_coordination_handler,
+                                                                 rubble_map=game_state.board.rubble,
+                                                                 occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
+                                                                 real_env_step=game_state.real_env_steps)
                 return action_sequence, False
 
         return ActionSequence(action_items=[], remaining_rewards=[], reward=0), False
@@ -61,7 +74,7 @@ class UnitController:
             # check if pos on map
             if 0 < new_pos[0] < MAP_SIZE and 0 < new_pos[1] < MAP_SIZE:
                 # check if pos is free
-                if unit_coordination_handler.check_field_occupied(new_pos[0], new_pos[1], unit.unit_id):
+                if unit_coordination_handler.check_field_occupied(new_pos[0], new_pos[1], unit):
                     continue
                 else:
                     if direction == Direction.CENTER:
@@ -82,7 +95,7 @@ class UnitController:
                                                 unit_coordination_handler: UnitCoordinationHandler,
                                                 real_env_step: int) -> ActionSequence:
 
-        valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta)
+        valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta, unit_coordination_handler)
 
         best_sequence = self.evaluate_reward_sequences(occupancy_map, real_env_step, rubble_map, unit, unit_coordination_handler,
                                                        valid_reward_sequences)

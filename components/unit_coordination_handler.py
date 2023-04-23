@@ -3,13 +3,14 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 import numpy as np
-from scipy.ndimage import binary_dilation
 
 from components.actions import ActionSequence, RewardedAction, rewarded_actions, ActionType
 from components.constants import MAP_SIZE
+from components.enemy_map import EnemyMap
 from components.extended_game_state import ExtendedGameState
 from components.utils import get_position_after_lux_action
 from lux.factory import Factory
+from lux.unit import Unit
 
 
 @dataclass
@@ -20,23 +21,6 @@ class UnitReference:
 
     def get_reward_positions(self, action_type: RewardedAction) -> np.array:
         return np.argwhere(self.reward_masks[action_type] == 1)
-
-
-class EnemyMap:
-    def __init__(self, opp_player: str):
-        self.enemy_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
-        self.power_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
-        self.opp_player = opp_player
-        self.fight_map = np.zeros((MAP_SIZE, MAP_SIZE))
-
-    def update(self, game_state: ExtendedGameState):
-        self.enemy_map = np.zeros((MAP_SIZE, MAP_SIZE))
-        self.power_map: np.array = np.zeros((MAP_SIZE, MAP_SIZE))
-        for _, unit in game_state.game_state.units[self.opp_player].items():
-            self.enemy_map[unit.pos[0], unit.pos[1]] = 1 if unit.unit_type == 'LIGHT' else 2
-            self.power_map[unit.pos[0], unit.pos[1]] = unit.power
-
-        self.fight_map = binary_dilation(self.enemy_map) * 1000
 
 
 class RewardActionHandler:
@@ -92,37 +76,51 @@ class RewardActionHandler:
 class UnitCoordinationHandler:
     def __init__(self, self_player: str, opp_player: str):
         self.references: Dict[str, UnitReference] = dict()
-        self.occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
+        self._occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
         self.reward_action_handler: Dict[RewardedAction, RewardActionHandler] = dict()
         self.enemy_map: EnemyMap = EnemyMap(opp_player=opp_player)
 
         self.self_player = self_player
 
     def build_occupancy_map(self, game_state: ExtendedGameState, opponent_player: str):
-        self.occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
+        self._occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
         for _, factory in game_state.game_state.factories[opponent_player].items():
             pos_slice = factory.pos_slice
-            self.occupancy_map[pos_slice] = 1
+            self._occupancy_map[pos_slice] = 1
 
     def mark_field_as_occupied(self, x: int, y: int, unit_id: str):
         if 0 < x < MAP_SIZE and 0 < y < MAP_SIZE:
             unit_number = int(unit_id.split("_")[1])
-            self.occupancy_map[x, y] = unit_number
+            self._occupancy_map[x, y] = unit_number
 
     def update_enemy_map(self, game_state: ExtendedGameState):
         self.enemy_map.update(game_state)
-        self.reward_action_handler[ActionType.FIGHT]._reward_mask = self.enemy_map.fight_map
+        self.reward_action_handler[ActionType.FIGHT]._reward_mask = self.enemy_map.enemy_map
 
-    def check_field_occupied(self, x: int, y: int, unit_id: str) -> bool:
+    def fight_possible_after_lux_action(self, lux_action: np.array, cur_pos: np.array) -> bool:
+        pos = get_position_after_lux_action(lux_action, cur_pos)
+        return self.enemy_map.is_fighting_position(pos[0], pos[1])
+
+    def on_fight_field(self, cur_pos: np.array):
+        return self.enemy_map.is_fighting_position(cur_pos[0], cur_pos[1])
+
+    def get_enemy_adjusted_occupancy_map(self, unit: Unit):
+        return self._occupancy_map + self.enemy_map.superior_enemies_map(unit)
+
+    def get_strongest_enemy(self, pos: np.array) -> Tuple[int, int]:
+        return self.enemy_map.get_strongest_enemy(pos)
+
+    def check_field_occupied(self, x: int, y: int, unit: Unit) -> bool:
         if 0 < x < MAP_SIZE and 0 < y < MAP_SIZE:
-            unit_number = int(unit_id.split("_")[1])
-            return self.occupancy_map[x, y] != unit_number and self.occupancy_map[x, y] != 0
+            unit_number = int(unit.unit_id.split("_")[1])
+            occupancy_map = self.get_enemy_adjusted_occupancy_map(unit)
+            return occupancy_map[x, y] != unit_number and occupancy_map[x, y] != 0
         else:
             return True
 
-    def collision_after_lux_action(self, lux_action: np.array, cur_pos: np.array, unit_id: str) -> bool:
+    def collision_after_lux_action(self, lux_action: np.array, cur_pos: np.array, unit: Unit) -> bool:
         pos = get_position_after_lux_action(lux_action, cur_pos)
-        return self.check_field_occupied(pos[0], pos[1], unit_id)
+        return self.check_field_occupied(pos[0], pos[1], unit)
 
     def register_lux_action_for_collision(self, lux_action: np.array, cur_pos: np.array, unit_id: str):
         pos = get_position_after_lux_action(lux_action, cur_pos)
@@ -274,6 +272,6 @@ class UnitCoordinationHandler:
 
         elif action_type is ActionType.FIGHT:
             reward_action_handler = RewardActionHandler(action_type)
-            reward_action_handler._reward_mask = self.enemy_map.fight_map
+            reward_action_handler._reward_mask = self.enemy_map.enemy_map
             reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
             return reward_action_handler
