@@ -25,11 +25,12 @@ class UnitController:
     def update_action_queue(self, unit: Unit, unit_meta: UnitMetadata, unit_coordination_handler: UnitCoordinationHandler,
                             game_state: ExtendedGameState) -> Tuple[ActionSequence, bool]:
         unit_id = unit.unit_id
+        lichen_map = game_state.board.lichen
         if len(unit.action_queue) == 0:
             unit_coordination_handler.clean_up_unit(unit_id)
             action_sequence = self.find_optimally_rewarded_action_sequence(unit, unit_meta,
                                                                            unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
-                                                                           game_state.board.rubble,
+                                                                           game_state.board.rubble, lichen_map=lichen_map,
                                                                            unit_coordination_handler=unit_coordination_handler,
                                                                            real_env_step=game_state.real_env_steps)
             return action_sequence, False
@@ -42,7 +43,7 @@ class UnitController:
                                                                                                unit_coordination_handler=unit_coordination_handler)
             action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
                                                              unit_coordination_handler=unit_coordination_handler,
-                                                             rubble_map=game_state.board.rubble,
+                                                             rubble_map=game_state.board.rubble, lichen_map=lichen_map,
                                                              occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
                                                              real_env_step=game_state.real_env_steps)
             if action_sequence.empty:
@@ -58,8 +59,9 @@ class UnitController:
             if rewarded_actions is not None:
                 action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
                                                                  unit_coordination_handler=unit_coordination_handler,
-                                                                 rubble_map=game_state.board.rubble,
-                                                                 occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
+                                                                 rubble_map=game_state.board.rubble, lichen_map=lichen_map,
+                                                                 occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(
+                                                                     unit),
                                                                  real_env_step=game_state.real_env_steps)
                 return action_sequence, False
 
@@ -92,23 +94,26 @@ class UnitController:
         return ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
 
     def find_optimally_rewarded_action_sequence(self, unit: Unit, unit_meta: UnitMetadata, occupancy_map: np.array, rubble_map: np.array,
-                                                unit_coordination_handler: UnitCoordinationHandler,
+                                                lichen_map: np.array, unit_coordination_handler: UnitCoordinationHandler,
                                                 real_env_step: int) -> ActionSequence:
 
         valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta, unit_coordination_handler)
 
-        best_sequence = self.evaluate_reward_sequences(occupancy_map, real_env_step, rubble_map, unit, unit_coordination_handler,
-                                                       valid_reward_sequences)
+        best_sequence = self.evaluate_reward_sequences(occupancy_map=occupancy_map, real_env_step=real_env_step, rubble_map=rubble_map,
+                                                       unit=unit, unit_coordination_handler=unit_coordination_handler,
+                                                       reward_sequences=valid_reward_sequences, lichen_map=lichen_map)
 
         return best_sequence
 
-    def evaluate_reward_sequences(self, occupancy_map: np.array, real_env_step: int, rubble_map: np.array, unit: Unit,
+    def evaluate_reward_sequences(self, occupancy_map: np.array, real_env_step: int, rubble_map: np.array, unit: Unit, lichen_map: np.array,
                                   unit_coordination_handler: UnitCoordinationHandler, reward_sequences: List[List[RewardedAction]]):
         best_sequence = ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
-        for sequence in reward_sequences:
+        if reward_sequences is None:
+            return best_sequence
+        for sequence in reward_sequences:  # TODO bug fix nee, this can be null, although it should never happen...
             action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=sequence,
                                                                      unit_coordination_handler=unit_coordination_handler,
-                                                                     rubble_map=rubble_map,
+                                                                     rubble_map=rubble_map, lichen_map=lichen_map,
                                                                      occupancy_map=occupancy_map, real_env_step=real_env_step)
             if action_sequence.reward > best_sequence.reward:
                 best_sequence = action_sequence
@@ -148,13 +153,14 @@ class UnitController:
     def calculate_optimal_action_sequence(self, unit: Unit,
                                           rewarded_action_sequence: List[RewardedAction],
                                           unit_coordination_handler: UnitCoordinationHandler,
-                                          rubble_map: np.array, occupancy_map: np.array,
+                                          rubble_map: np.array, lichen_map: np.array, occupancy_map: np.array,
                                           real_env_step: int) -> ActionSequence:
         unit_charge = 10 if unit.unit_type == 'HEAVY' else 1  # TODO import constant here
         eff_unit_charge = unit_charge * 0.6
         move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
         digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
         digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
+        looting_speed = 100 if unit.unit_type == 'HEAVY' else 20  # and here
         battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 150  # and here
 
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
@@ -205,7 +211,7 @@ class UnitController:
                 safety_moves = 2  # TODO collect free parameters in central place
                 power_for_digging -= safety_moves * move_costs
                 if power_for_digging < digging_costs and (
-                        ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence or ActionType.DIG in rewarded_action_sequence):
+                        ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence or ActionType.DIG in rewarded_action_sequence or ActionType.LOOT):
                     continue
 
                 # build sequence
@@ -233,6 +239,14 @@ class UnitController:
                     if following_rewarded_action is ActionType.DIG:
                         max_repeat = math.floor(power_for_digging / digging_costs)
                         repeat = min(math.ceil(rubble_map[cur_pos[0], cur_pos[1]] / digging_speed), max_repeat)
+                        if repeat <= 0:
+                            action_items = []
+                            reward = -1_000_000_000
+                            break
+
+                        power_for_digging -= repeat * digging_costs
+                    if following_rewarded_action is ActionType.LOOT:
+                        repeat = math.ceil(lichen_map[cur_pos[0], cur_pos[1]] / looting_speed)
                         if repeat <= 0:
                             action_items = []
                             reward = -1_000_000_000
@@ -278,7 +292,7 @@ class UnitController:
 
     @staticmethod
     def _build_day_night_cycle():
-        return np.array(([1] * 30 + [0] * 20) * 30)  # TODO currently extends into the future
+        return np.array(([1] * 30 + [0] * 20) * 80)
 
     @staticmethod
     def calculate_reward(action_item: ActionItem, unit_coordination_handler: UnitCoordinationHandler, cur_ice: int, cur_ore: int,
@@ -302,6 +316,8 @@ class UnitController:
             return 0
         if action_type is ActionType.RECHARGE:
             return recharge_power * 0.0001
+        if action_type is ActionType.LOOT:
+            return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
         else:
             print("Warning: invalid action type for reward", file=sys.stderr)
         return 0

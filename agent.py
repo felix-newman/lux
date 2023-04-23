@@ -2,6 +2,7 @@ import sys
 from typing import Dict, List
 
 import numpy as np
+import random
 
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
@@ -20,6 +21,7 @@ class Agent():
         self.player = player
         self.opp_player = "player_1" if self.player == "player_0" else "player_0"
         np.random.seed(0)
+        random.seed(1)
         self.env_cfg: EnvConfig = env_cfg
 
         self.factory_value_map = None
@@ -71,6 +73,7 @@ class Agent():
 
         self.unit_coordination_handler.build_occupancy_map(game_state, self.opp_player)
         self.unit_coordination_handler.update_enemy_map(game_state)
+        self.unit_coordination_handler.update_loot_map(game_state)
 
         # TODO factory logic and updating of coordination handler
         for factory_id, factory in game_state.game_state.factories[self.player].items():
@@ -88,7 +91,7 @@ class Agent():
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
             if unit_id not in self.tracked_units:
-                unit_role = UnitRole.MINER if step < 20 else UnitRole.DIGGER
+                unit_role = UnitRole.MINER if step < 20 else random.choice([UnitRole.DIGGER, UnitRole.FIGHTER])
                 self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=unit_role, unit_type=unit.unit_type,
                                                            cur_action_sequence=ActionSequence(action_items=[], reward=0,
                                                                                               remaining_rewards=[]), last_action=None)

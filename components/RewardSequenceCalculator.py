@@ -13,6 +13,8 @@ class RewardSequenceCalculator:
             return self.calculate_miner_reward_sequences(unit, unit_coordination_handler)
         elif unit_meta.role == UnitRole.DIGGER:
             return self.calculate_digger_reward_sequences(unit, unit_coordination_handler)
+        elif unit_meta.role == UnitRole.FIGHTER:
+            return self.calculate_fighter_reward_sequences(unit, unit_coordination_handler)
 
     def calculate_miner_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
         if unit_coordination_handler.on_fight_field(unit.pos):
@@ -68,4 +70,20 @@ class RewardSequenceCalculator:
                 return [[ActionType.FIGHT, ActionType.RETURN], [ActionType.RETURN]]
 
     # TODO for fighter: consider both cases of staying and moving to fight field
+    def calculate_fighter_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
+        if unit_coordination_handler.on_fight_field(unit.pos):
+            return self.worker_behavior_on_enemy_encounter(unit, unit_coordination_handler)
+
+        valid_reward_sequences = [
+            [ActionType.PICKUP_POWER, ActionType.FIGHT, ActionType.RETURN],
+            [ActionType.FIGHT, ActionType.RETURN],
+
+            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+            [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+            [ActionType.LOOT],
+            [ActionType.RECHARGE, ActionType.RETURN]
+        ]
+
+        return valid_reward_sequences
 

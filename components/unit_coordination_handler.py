@@ -1,6 +1,6 @@
 import sys
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 import numpy as np
 
@@ -81,6 +81,9 @@ class UnitCoordinationHandler:
         self.enemy_map: EnemyMap = EnemyMap(opp_player=opp_player)
 
         self.self_player = self_player
+        self.opp_player = opp_player
+        self.own_lichen_strains: List[int] = []
+        self.enemy_lichen_strains: List[int] = []
 
     def build_occupancy_map(self, game_state: ExtendedGameState, opponent_player: str):
         self._occupancy_map = np.zeros((MAP_SIZE, MAP_SIZE))
@@ -100,6 +103,13 @@ class UnitCoordinationHandler:
     def fight_possible_after_lux_action(self, lux_action: np.array, cur_pos: np.array) -> bool:
         pos = get_position_after_lux_action(lux_action, cur_pos)
         return self.enemy_map.is_fighting_position(pos[0], pos[1])
+
+    def update_loot_map(self, game_state: ExtendedGameState):
+        reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+        for strain_id in self.enemy_lichen_strains:
+            reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
+
+        self.reward_action_handler[ActionType.LOOT]._reward_mask = reward_mask
 
     def on_fight_field(self, cur_pos: np.array):
         return self.enemy_map.is_fighting_position(cur_pos[0], cur_pos[1])
@@ -196,6 +206,12 @@ class UnitCoordinationHandler:
                 del unit_reference.reward_maps[action_type]
 
     def initialize_unit_reward_handler(self, game_state: ExtendedGameState):
+        for factory_id, factory in game_state.game_state.factories[self.self_player].items():
+            self.own_lichen_strains.append(factory.strain_id)
+
+        for factory_id, factory in game_state.game_state.factories[self.opp_player].items():
+            self.enemy_lichen_strains.append(factory.strain_id)
+
         for action_type in rewarded_actions:
             self.reward_action_handler[action_type] = self._build_reward_action_handler(action_type, game_state)
 
@@ -235,12 +251,12 @@ class UnitCoordinationHandler:
             return reward_action_handler
         elif action_type is ActionType.TRANSFER_ICE:
             reward_action_handler = RewardActionHandler(action_type)
-            reward_action_handler._reward_mask = game_state.player_factories * 2
+            reward_action_handler._reward_mask = game_state.player_factories * 1
             reward_action_handler.reward_map = game_state.player_factories * 10
             return reward_action_handler
         elif action_type is ActionType.TRANSFER_ORE:
             reward_action_handler = RewardActionHandler(action_type)
-            reward_action_handler._reward_mask = game_state.player_factories * 2
+            reward_action_handler._reward_mask = game_state.player_factories * 3
             reward_action_handler.reward_map = game_state.player_factories * 10
 
             return reward_action_handler
@@ -273,5 +289,16 @@ class UnitCoordinationHandler:
         elif action_type is ActionType.FIGHT:
             reward_action_handler = RewardActionHandler(action_type)
             reward_action_handler._reward_mask = self.enemy_map.enemy_map
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
+            return reward_action_handler
+
+        elif action_type is ActionType.LOOT:
+            reward_action_handler = RewardActionHandler(action_type)
+
+            reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+            for strain_id in self.enemy_lichen_strains:
+                reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
+
+            reward_action_handler._reward_mask = reward_mask
             reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
             return reward_action_handler

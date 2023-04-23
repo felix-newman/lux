@@ -22,6 +22,7 @@ class ActionType(Enum):
     RETURN = 11
     RECHARGE = 12
     FIGHT = 13
+    LOOT = 14
 
     @property
     def is_factory_action(self) -> bool:
@@ -40,10 +41,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT]
 
 
 class Direction(Enum):
@@ -81,6 +82,7 @@ class ActionItem:
             ActionType.RETURN: "RT",
             ActionType.RECHARGE: "RC",
             ActionType.FIGHT: "F",
+            ActionType.LOOT: "LT",
         }
 
         return f"({abbrev[self.type]}, {self.repeat})"
@@ -123,6 +125,8 @@ class ActionItem:
             return None
         if self.type == ActionType.FIGHT:
             return None
+        if self.type == ActionType.LOOT:
+            return np.array([3, 0, 0, 0, 0, self.repeat])
 
         if self.type == ActionType.RECHARGE:
             return np.array([5, 0, 4, int(self.amount), 0, 1])
