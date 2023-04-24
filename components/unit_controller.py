@@ -110,7 +110,7 @@ class UnitController:
         best_sequence = ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
         if reward_sequences is None:
             return best_sequence
-        for sequence in reward_sequences:  # TODO bug fix nee, this can be null, although it should never happen...
+        for sequence in reward_sequences:
             action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=sequence,
                                                                      unit_coordination_handler=unit_coordination_handler,
                                                                      rubble_map=rubble_map, lichen_map=lichen_map,
@@ -160,7 +160,7 @@ class UnitController:
         move_costs = 20 if unit.unit_type == 'HEAVY' else 1  # same here
         digging_costs = 60 if unit.unit_type == 'HEAVY' else 5  # and here
         digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
-        looting_speed = 100 if unit.unit_type == 'HEAVY' else 20  # and here
+        looting_speed = 100 if unit.unit_type == 'HEAVY' else 10  # and here
         battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 150  # and here
 
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
@@ -229,7 +229,7 @@ class UnitController:
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = min(10, math.floor(power_for_digging / digging_costs))
+                        repeat = min(15, math.floor(power_for_digging / digging_costs))
                         cur_ore += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.MINE_ICE:
@@ -318,8 +318,10 @@ class UnitController:
             return recharge_power * 0.0001
         if action_type is ActionType.LOOT:
             return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
+        if action_type is ActionType.FIGHT:
+            return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
         else:
-            print("Warning: invalid action type for reward", file=sys.stderr)
+            print(f"Warning: invalid action type for reward {action_type}", file=sys.stderr)
         return 0
 
     @staticmethod

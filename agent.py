@@ -4,6 +4,7 @@ from typing import Dict, List
 import numpy as np
 import random
 
+from components.FactoryState import FactoryState, FactoryAction
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
@@ -30,7 +31,7 @@ class Agent():
         self.unit_coordination_handler = UnitCoordinationHandler(self_player=self.player, opp_player=self.opp_player)
 
         self.tracked_units: Dict[str, UnitMetadata] = dict()
-        self.role_switches: List[str] = list()
+        self.factory_states: Dict[str, FactoryState] = dict()
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if step == 0:
@@ -75,26 +76,11 @@ class Agent():
         self.unit_coordination_handler.update_enemy_map(game_state)
         self.unit_coordination_handler.update_loot_map(game_state)
 
-        # TODO factory logic and updating of coordination handler
-        for factory_id, factory in game_state.game_state.factories[self.player].items():
-            if factory.can_build_heavy(game_state):
-                actions[factory_id] = factory.build_heavy()
-                self.unit_coordination_handler.mark_field_as_occupied(factory.pos[0], factory.pos[1], 'unit_99999')
-
-            elif factory.can_build_light(game_state):
-                actions[factory_id] = factory.build_light()
-                self.unit_coordination_handler.mark_field_as_occupied(factory.pos[0], factory.pos[1], 'unit_99999')
-
-            elif step > 800 and factory.can_water(game_state) and factory.cargo.water - factory.water_cost(game_state) > 1000 - step:
-                actions[factory_id] = factory.water()
-
-        # assign tasks to units
-        for unit_id, unit in game_state.game_state.units[self.player].items():
-            if unit_id not in self.tracked_units:
-                unit_role = UnitRole.MINER if step < 20 else random.choice([UnitRole.DIGGER, UnitRole.FIGHTER])
-                self.tracked_units[unit_id] = UnitMetadata(unit_id=unit_id, role=unit_role, unit_type=unit.unit_type,
-                                                           cur_action_sequence=ActionSequence(action_items=[], reward=0,
-                                                                                              remaining_rewards=[]), last_action=None)
+        new_dig_reward_map = (np.ones(
+            (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
+                                                                                           1, 0)) * game_state.board.rubble
+        new_dig_reward_mask = np.where(new_dig_reward_map > 0, 1, 0)
+        self.unit_coordination_handler.update_reward_handler(ActionType.DIG, new_dig_reward_map, new_dig_reward_mask)
 
         # clean up dead units, units with empty action sequences
         units_to_remove = []
@@ -111,27 +97,46 @@ class Agent():
             if unit_meta.last_action == ActionType.PICKUP_POWER:
                 self.unit_coordination_handler.clean_up_action_type(unit_id=unit_id, action_type=ActionType.PICKUP_POWER)
 
-        for unit_id in self.role_switches:
-            unit = self.tracked_units.get(unit_id)
-            if unit is not None:
-                if self.tracked_units[unit_id].role == UnitRole.MINER:
-                    self.tracked_units[unit_id].role = UnitRole.DIGGER
-                # elif self.tracked_units[unit_id].role == UnitRole.DIGGER:
-                #     self.tracked_units[unit_id].role = UnitRole.MINER
-
         for factory_id, factory in game_state.game_state.factories[self.player].items():
-            self.unit_coordination_handler.update_factory_rewards(ActionType.PICKUP_POWER, value=factory.power, factory=factory)
+            factory_state = self.factory_states[factory_id]
 
-        new_dig_reward_map = (np.ones(
-            (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
-                                                                                           1, 0)) * game_state.board.rubble
-        new_dig_reward_mask = np.where(new_dig_reward_map > 0, 1, 0)
-        self.unit_coordination_handler.update_reward_handler(ActionType.DIG, new_dig_reward_map, new_dig_reward_mask)
+            factory_state.update_stats(factory=factory, unit_coordination_handler=self.unit_coordination_handler,
+                                       game_state=game_state, self_player=self.player, tracked_units=self.tracked_units)
+            factory_state.calculate_next_rewards(game_state)
+            if factory_state.recalculate_next_build_and_role_in == 0:
+                factory_state.calculate_next_build_and_role(game_state)
+            factory_state.calculate_next_action(game_state)
 
-        # update unit action sequences TODO:
+            factory_state.register_next_action(unit_coordination_handler=self.unit_coordination_handler)
+            next_action = factory_state.get_next_action()
+            if next_action is not None:
+                actions[factory_id] = next_action
+
+            self.unit_coordination_handler.update_factory_rewards(ActionType.PICKUP_POWER,
+                                                                  reward_value=factory_state.available_power,
+                                                                  factory=factory_state.factory)
+            self.unit_coordination_handler.update_factory_rewards(ActionType.TRANSFER_ICE, reward_value=factory_state.ice_reward,
+                                                                  mask_value=factory_state.max_ice_miners,
+                                                                  factory=factory_state.factory)
+            self.unit_coordination_handler.update_factory_rewards(ActionType.TRANSFER_ORE, reward_value=factory_state.ore_reward,
+                                                                  mask_value=factory_state.max_ore_miners,
+                                                                  factory=factory_state.factory)
+
+        # assign tasks to units
+        for unit_id, unit in game_state.game_state.units[self.player].items():
+            if unit_id not in self.tracked_units:
+                closest_factory = self._find_closest_factory(unit.pos, game_state)
+                unit_role = self.factory_states[closest_factory].next_role
+
+                unit_meta = UnitMetadata(unit_id=unit_id, role=unit_role, unit_type=unit.unit_type,
+                                         cur_action_sequence=ActionSequence(action_items=[], reward=0, remaining_rewards=[]),
+                                         last_action=None)
+                self.tracked_units[unit_id] = unit_meta
+                self.factory_states[closest_factory].register_unit_at_factory(unit_meta)
+
         sorted_units = sorted(self.tracked_units.items(),
                               key=lambda x: (1, -game_state.game_state.units[self.player][x[0]].power) if x[1].unit_type == 'HEAVY' else (
-                              0, -game_state.game_state.units[self.player][x[0]].power), reverse=True)
+                                  0, -game_state.game_state.units[self.player][x[0]].power), reverse=True)
 
         for unit_id, unit_meta in sorted_units:
             unit = game_state.game_state.units[self.player][unit_id]
@@ -145,7 +150,7 @@ class Agent():
 
                 lux_action_queue = unit_meta.cur_action_sequence.to_lux_action_queue()
                 actions[unit_id] = lux_action_queue
-                print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
+                # print(unit.pos, unit_id, unit_meta.cur_action_sequence, file=sys.stderr)
 
                 next_action = lux_action_queue[0] if len(lux_action_queue) > 0 else None
                 if next_action is not None:
@@ -160,8 +165,6 @@ class Agent():
                 else:
                     self.unit_coordination_handler.mark_field_as_occupied(unit.pos[0], unit.pos[1], unit_id)
 
-            if role_change_requested:
-                self.role_switches.append(unit_id)
         print(f"Step: {step}", file=sys.stderr)
 
         for unit_id, unit in game_state.game_state.units[self.player].items():
@@ -176,15 +179,17 @@ class Agent():
 
     def setup(self, game_state: ExtendedGameState):
         self.unit_coordination_handler.initialize_unit_reward_handler(game_state)
+        for factory_id, factory in game_state.game_state.factories[self.player].items():
+            self.factory_states[factory_id] = FactoryState()
 
-    def _find_closest_factory(self, pos: np.array, game_state: ExtendedGameState):
+    def _find_closest_factory(self, pos: np.array, game_state: ExtendedGameState) -> str:
         closest_distance = np.inf
-        closest_factory = None
+        closest_factory_id = None
 
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             distance = np.sum(np.abs(factory.pos - pos))
             if distance < closest_distance:
                 closest_distance = distance
-                closest_factory = factory_id
+                closest_factory_id = factory_id
 
-        return closest_factory
+        return closest_factory_id

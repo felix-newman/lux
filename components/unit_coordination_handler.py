@@ -233,8 +233,9 @@ class UnitCoordinationHandler:
         self.reward_action_handler[action_type].reward_map = reward_map
         self.reward_action_handler[action_type]._reward_mask = reward_mask
 
-    def update_factory_rewards(self, action_type: RewardedAction, value: float, factory: Factory):
-        self.reward_action_handler[action_type].reward_map[factory.pos_slice] = value
+    def update_factory_rewards(self, action_type: RewardedAction, factory: Factory, reward_value: float, mask_value: float = 9999.0):
+        self.reward_action_handler[action_type].reward_map[factory.pos_slice] = reward_value
+        self.reward_action_handler[action_type]._reward_mask[factory.pos_slice] = mask_value
 
     def _build_reward_action_handler(self, action_type: RewardedAction,
                                      game_state: ExtendedGameState) -> RewardActionHandler:
@@ -300,5 +301,5 @@ class UnitCoordinationHandler:
                 reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
 
             reward_action_handler._reward_mask = reward_mask
-            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE)) * 2
             return reward_action_handler

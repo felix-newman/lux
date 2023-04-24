@@ -10,6 +10,14 @@ class UnitRole(Enum):
     DIGGER = 2
     FIGHTER = 3
 
+    def __str__(self):
+        if self == UnitRole.MINER:
+            return "Miner"
+        if self == UnitRole.DIGGER:
+            return "Digger"
+        if self == UnitRole.FIGHTER:
+            return "Fighter"
+
     def valid_reward_actions(self) -> List[RewardedAction]:
         if self == UnitRole.MINER:
             return [ActionType.MINE_ORE, ActionType.MINE_ICE, ActionType.PICKUP_POWER,
