@@ -113,7 +113,6 @@ class FactoryState:
         else:
             return None
 
-    # TODO masks have to be calculated
     def calculate_next_rewards(self, game_state: ExtendedGameState):
         self.available_power = max(0.0, self.factory.power - self.power_bank)
 
@@ -127,9 +126,11 @@ class FactoryState:
         if self.factory.cargo.water < 100 and game_state.real_env_steps < 900:
             self.ore_reward = 1.0
             self.ice_reward = 1.0
-        elif self.factory.cargo.water < 50 and game_state.real_env_steps < 900:
-            self.ore_reward = 5.0
-            self.ice_reward = 1.0
+        elif self.factory.cargo.water < 75 and game_state.real_env_steps < 900:
+            self.ore_reward = 1.0
+            self.ice_reward = 5.0
+            # TODO do role switch here
+
 
     # TODO ensure that heavy robots take most important task
     def calculate_next_build_and_role(self, game_state: ExtendedGameState):
