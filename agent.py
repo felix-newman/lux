@@ -57,8 +57,6 @@ class Agent():
             my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
             if factories_to_place > 0 and my_turn_to_place:
                 factory_value_map = compute_factory_value_map(game_state, self.lichen_potential_map)
-                if self.player == "player_0":
-                    plt.imsave(f"videos/factory_placement_mask{game_state.env_steps}.png", factory_value_map.T)
 
                 # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
                 best_spawn_idx = np.argmax(factory_value_map * game_state.board.valid_spawns_mask)

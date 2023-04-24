@@ -138,7 +138,7 @@ class FactoryState:
             if self.factory.cargo.water < 75:
                 self.ore_reward = 1.0
                 self.ice_reward = 5.0
-            elif self.factory.cargo.water < 100:
+            elif self.factory.cargo.water < 125:
                 self.ore_reward = 1.0
                 self.ice_reward = 2.0
 
