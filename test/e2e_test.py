@@ -5,7 +5,7 @@ from helpers import interact, animate
 
 if __name__ == "__main__":
     env = LuxAI_S2()  # create the environment object
-    seed = 12
+    seed = 15
     obs = env.reset(seed=seed)  # resets an environment with a seed
 
     agents = {player: Agent(player, env.state.env_cfg) for player in env.agents}

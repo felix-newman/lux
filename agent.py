@@ -3,16 +3,17 @@ import sys
 from typing import Dict
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 from components.FactoryState import FactoryState
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
 from components.extended_unit import UnitMetadata, UnitRole
-from components.factory_placement import compute_factory_value_map
+from components.factory_placement import compute_factory_value_map, compute_lichen_potential_map
 from components.unit_controller import UnitController
 from components.unit_coordination_handler import UnitCoordinationHandler
-from components.utils import get_cheapest_path
+from components.utils import get_cheapest_path, normalize_matrix
 from lux.config import EnvConfig
 from lux.kit import obs_to_game_state
 from lux.utils import my_turn_to_place_factory
@@ -26,7 +27,7 @@ class Agent():
         random.seed(1)
         self.env_cfg: EnvConfig = env_cfg
 
-        self.factory_value_map = None
+        self.lichen_potential_map = None
 
         self.unit_controller = UnitController()
         self.unit_coordination_handler = UnitCoordinationHandler(self_player=self.player, opp_player=self.opp_player)
@@ -41,8 +42,10 @@ class Agent():
         else:
             game_state = obs_to_game_state(step, self.env_cfg, obs)
             # factory placement period
-            if self.factory_value_map is None:
-                self.factory_value_map = compute_factory_value_map(game_state)
+
+            if self.lichen_potential_map is None:
+                self.lichen_potential_map = compute_lichen_potential_map(game_state.board.rubble)
+                self.lichen_potential_map = normalize_matrix(self.lichen_potential_map)
 
             # how much water and metal you have in your starting pool to give to new factories
             water_left = game_state.teams[self.player].water
@@ -53,9 +56,13 @@ class Agent():
             # whether it is your turn to place a factory
             my_turn_to_place = my_turn_to_place_factory(game_state.teams[self.player].place_first, step)
             if factories_to_place > 0 and my_turn_to_place:
+                factory_value_map = compute_factory_value_map(game_state, self.lichen_potential_map)
+                if self.player == "player_0":
+                    plt.imsave(f"videos/factory_placement_mask{game_state.env_steps}.png", factory_value_map.T)
+
                 # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
-                best_spawn_idx = np.argmax(self.factory_value_map * game_state.board.valid_spawns_mask)
-                spawn_loc = np.unravel_index(best_spawn_idx, self.factory_value_map.shape)
+                best_spawn_idx = np.argmax(factory_value_map * game_state.board.valid_spawns_mask)
+                spawn_loc = np.unravel_index(best_spawn_idx, factory_value_map.shape)
                 return dict(spawn=spawn_loc, metal=150, water=150)
             return dict()
 

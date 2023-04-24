@@ -1,1 +1,1 @@
-call luxai-s2 main.py main.py -s 13 --out=replay.html
+call luxai-s2 main.py main.py -s 14 --out=replay.html

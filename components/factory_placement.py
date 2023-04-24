@@ -34,17 +34,27 @@ def compute_lichen_potential_map(rubble_map, dig_speed=5, steps=20):
     return lichen_potential
 
 
-def compute_factory_value_map(game_state: GameState, dig_speed=5, steps=5):
+def compute_factory_value_map(game_state: GameState, lichen_potential_map: np.array, dig_speed=5, steps=5):
     rubble_map = game_state.board.rubble
     ice_map = game_state.board.ice
     ore_map = game_state.board.ore
 
-    lichen_potential = compute_lichen_potential_map(rubble_map, dig_speed=dig_speed, steps=steps)
-    ice_distance = distance_transform_cdt(1 - ice_map, metric='taxicab')
-    ore_distance = distance_transform_cdt(1 - ore_map, metric='taxicab')
+    occupancy_map = np.where(game_state.board.factory_occupancy_map >= 0, 1, 0)
+    dilated_occupancy = binary_dilation(occupancy_map, np.ones((3, 3)))
 
+    valid_ice_map = ice_map * (1 - dilated_occupancy)
+    valid_ore_map = ore_map * (1 - dilated_occupancy)
+
+
+    ice_distance = distance_transform_cdt(1 - valid_ice_map, metric='taxicab')
+    ore_distance = distance_transform_cdt(1 - valid_ore_map, metric='taxicab')
+
+    if np.max(ice_distance) == -1 and np.min(ice_distance) == -1:
+        ice_distance = distance_transform_cdt(1 - ice_map, metric='taxicab')
     ice_score_map = normalize_matrix(96 - ice_distance)
-    ore_score_map = normalize_matrix(96 - ore_distance)
-    lichen_score_map = normalize_matrix(lichen_potential)
 
-    return 4 * ice_score_map + ore_score_map
+    if np.max(ore_distance) == -1 and np.min(ore_distance) == -1:
+        ore_distance = distance_transform_cdt(1 - ore_map, metric='taxicab')
+    ore_score_map = normalize_matrix(96 - ore_distance)
+
+    return 8 * ice_score_map #+ 2 * lichen_potential_map + ore_score_map
