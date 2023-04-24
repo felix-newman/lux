@@ -200,12 +200,12 @@ class Agent():
         new_dig_reward_map = np.ones((MAP_SIZE, MAP_SIZE))*5
         inv_rubble = 100 - game_state.board.rubble
         dig_needed = np.where(inv_rubble < 100, inv_rubble, 0)
-        easy_dig = np.where(dig_needed > 50, 1, 0)
+        easy_dig = np.where(dig_needed > 20, 1, 0)
         new_dig_reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             pos = factory.pos
             distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
-            close_points = np.where(distance_map <= 6, 1, 0)
+            close_points = np.where(distance_map <= 7, 1, 0)
 
             target_point_mask = np.logical_and(close_points, easy_dig)
             if np.max(target_point_mask) == 0:

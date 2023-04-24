@@ -150,24 +150,24 @@ class FactoryState:
                 self.next_role = UnitRole.MINER
             else:
                 # TODO take rubble into account and closeness to enemy factory
-                if game_state.real_env_steps < 500:
-                    self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.7, 0.3])[0]
-                    probabilities = [1.0, 0.0] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.3, 0.7]
+                if game_state.real_env_steps < 600:
+                    self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.8, 0.2])[0]
+                    probabilities = [0.7, 0.3] if self.next_build_action == FactoryAction.BUILD_HEAVY else [1.0, 0.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
                 # TODO take rubble into account and enemy bots
                 else:
                     self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.9, 0.1])[0]
-                    probabilities = [0.5, 0.5] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
+                    probabilities = [0.1, 0.9] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
         elif 0 < self.ore_income_per_round < 4:
-            if light_miners < 3:
+            if light_miners < 2:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
                 self.next_role = UnitRole.MINER
             else:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
-                probabilities = [0.5, 0.5] if game_state.real_env_steps < 700 else [0.0, 1.0]
+                probabilities = [0.8, 0.2] if game_state.real_env_steps < 800 else [0.0, 1.0]
                 self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
         else:  # no ore income
