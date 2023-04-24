@@ -296,7 +296,7 @@ class UnitController:
         power_pickup = min(max_power_pickup, available_power * 0.5) if unit.unit_type == 'HEAVY' else min(
             battery_capacity, available_power * 0.05)
 
-        return power_pickup
+        return max(0.0, power_pickup)
 
     @staticmethod
     def _build_day_night_cycle():

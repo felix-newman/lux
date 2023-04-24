@@ -72,19 +72,30 @@ class RewardSequenceCalculator:
     # TODO for fighter: consider both cases of staying and moving to fight field
     def calculate_fighter_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
         if unit_coordination_handler.on_fight_field(unit.pos):
-            return self.worker_behavior_on_enemy_encounter(unit, unit_coordination_handler)
+            return self.fighter_behavior_on_enemy_encounter(unit, unit_coordination_handler)
 
         valid_reward_sequences = [
-            [ActionType.PICKUP_POWER, ActionType.FIGHT, ActionType.RETURN],
-            [ActionType.FIGHT, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.FIGHT],
+            [ActionType.FIGHT],
 
-            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
-            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
-            [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.LOOT],
+            [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
             [ActionType.LOOT],
-            [ActionType.RECHARGE, ActionType.RETURN],
             [ActionType.RECHARGE]
         ]
 
         return valid_reward_sequences
+
+    @staticmethod
+    def fighter_behavior_on_enemy_encounter(unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
+        heaviest_robot, max_power_value = unit_coordination_handler.get_strongest_enemy(unit.pos)
+        own_type = 2 if unit.unit_type == 'HEAVY' else 1
+        if heaviest_robot == 1 and unit.unit_type == 'HEAVY':
+            return None
+        else:
+            # adjusted_power = unit.power - 5 if unit.unit_type == 'LIGHT' else unit.power - 80
+            if own_type < heaviest_robot:
+                return [[ActionType.RETURN]]  # TODO should be flee
+            else:
+                return [[ActionType.FIGHT]]
 

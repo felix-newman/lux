@@ -30,9 +30,11 @@ class FactoryState:
         self.ore_reward: float = 5.0
         self.ice_reward: float = 1.0
         self.available_power: float = 0.0
+        self.power_bank = 0.0
+        self.savings_for_build = 10.0
 
         self.max_ice_miners = 1.0
-        self.max_ore_miners = 1.0
+        self.max_ore_miners = 3.0
 
         self.ore_miners_to_type: Dict[str, str] = dict()
         self.ice_miners_to_type: Dict[str, str] = dict()
@@ -56,6 +58,7 @@ class FactoryState:
 
         self.factory = factory
         self.recalculate_next_build_and_role_in -= 1
+        self.power_bank += self.savings_for_build
 
         x, y = factory.pos
         ice_miners = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ICE].taker_to_priority[x][y].keys()
@@ -76,7 +79,7 @@ class FactoryState:
 
         self.ore_reward = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ORE].reward_map[x][y]
         self.ice_reward = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ICE].reward_map[x][y]
-        self.available_power = factory.power
+
 
         miners_to_remove = []
         for unit_id in self.built_miners_to_type:
@@ -112,7 +115,7 @@ class FactoryState:
 
     # TODO masks have to be calculated
     def calculate_next_rewards(self, game_state: ExtendedGameState):
-        self.available_power = self.factory.power
+        self.available_power = max(0.0, self.factory.power - self.power_bank)
 
         if game_state.real_env_steps < 500:
             self.ore_reward = 5.0
@@ -159,7 +162,6 @@ class FactoryState:
 
         elif 0 < self.ore_income_per_round < 4:
             if light_miners < 3:
-                self.max_ore_miners = 3
                 self.next_build_action = FactoryAction.BUILD_LIGHT
                 self.next_role = UnitRole.MINER
             else:
@@ -222,6 +224,7 @@ class FactoryState:
     def register_next_action(self, unit_coordination_handler: UnitCoordinationHandler):
         if self.next_action == FactoryAction.BUILD_LIGHT or self.next_action == FactoryAction.BUILD_HEAVY:
             self.available_power = self.available_power - 500 if self.next_action == FactoryAction.BUILD_HEAVY else self.available_power - 50
+            self.power_bank = 0.0
 
             unit_coordination_handler.mark_field_as_occupied(self.factory.pos[0], self.factory.pos[1], 'unit_99999')
             self.recalculate_next_build_and_role_in = 2
