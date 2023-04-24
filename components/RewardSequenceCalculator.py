@@ -8,13 +8,13 @@ class RewardSequenceCalculator:
     def __init__(self):
         pass
 
-    def calculate_valid_reward_sequence(self, unit: Unit, unit_meta: UnitMetadata, unit_coordination_handler: UnitCoordinationHandler):
+    def calculate_valid_reward_sequence(self, unit: Unit, unit_meta: UnitMetadata, unit_coordination_handler: UnitCoordinationHandler, step: int):
         if unit_meta.role == UnitRole.MINER:
             return self.calculate_miner_reward_sequences(unit, unit_coordination_handler)
         elif unit_meta.role == UnitRole.DIGGER:
             return self.calculate_digger_reward_sequences(unit, unit_coordination_handler)
         elif unit_meta.role == UnitRole.FIGHTER:
-            return self.calculate_fighter_reward_sequences(unit, unit_coordination_handler)
+            return self.calculate_fighter_reward_sequences(unit, unit_coordination_handler, step)
 
     def calculate_miner_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
         if unit_coordination_handler.on_fight_field(unit.pos):
@@ -73,20 +73,31 @@ class RewardSequenceCalculator:
                 return [[ActionType.FIGHT, ActionType.RETURN], [ActionType.RETURN]]
 
     # TODO for fighter: consider both cases of staying and moving to fight field
-    def calculate_fighter_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler):
+    def calculate_fighter_reward_sequences(self, unit: Unit, unit_coordination_handler: UnitCoordinationHandler, step: int):
         if unit_coordination_handler.on_fight_field(unit.pos):
             return self.fighter_behavior_on_enemy_encounter(unit, unit_coordination_handler)
 
-        valid_reward_sequences = [
-            [ActionType.PICKUP_POWER, ActionType.FIGHT],
-            [ActionType.FIGHT],
+        if step < 850:
+            valid_reward_sequences = [
+                [ActionType.FIGHT, ActionType.RETURN],
 
-            [ActionType.PICKUP_POWER, ActionType.LOOT],
-            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT],
-            [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
-            [ActionType.LOOT],
-            [ActionType.RECHARGE]
-        ]
+                [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+                [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+                [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.RETURN],
+                [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
+                [ActionType.LOOT],
+                [ActionType.RECHARGE]
+            ]
+        else:
+            valid_reward_sequences = [
+                [ActionType.FIGHT],
+                [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT],
+                [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
+                [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
+                [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
+                [ActionType.LOOT],
+                [ActionType.RECHARGE]
+            ]
 
         return valid_reward_sequences
 

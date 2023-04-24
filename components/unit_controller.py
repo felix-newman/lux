@@ -41,7 +41,7 @@ class UnitController:
 
             unit_coordination_handler.clean_up_unit(unit_id)
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
-                                                                                               unit_coordination_handler=unit_coordination_handler)
+                                                                                               unit_coordination_handler=unit_coordination_handler, step=game_state.real_env_steps)
             action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
                                                              unit_coordination_handler=unit_coordination_handler,
                                                              rubble_map=game_state.board.rubble, lichen_map=lichen_map,
@@ -56,7 +56,7 @@ class UnitController:
         if unit_coordination_handler.on_fight_field(unit.pos):
             unit_coordination_handler.clean_up_unit(unit_id)
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
-                                                                                               unit_coordination_handler=unit_coordination_handler)
+                                                                                               unit_coordination_handler=unit_coordination_handler, step=game_state.real_env_steps)
             if rewarded_actions is not None:
                 action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
                                                                  unit_coordination_handler=unit_coordination_handler,
@@ -69,7 +69,7 @@ class UnitController:
         if unit_meta.unit_type == UnitRole.FIGHTER and random.random() < 0.12:
             unit_coordination_handler.clean_up_unit(unit_id)
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
-                                                                                               unit_coordination_handler=unit_coordination_handler)
+                                                                                               unit_coordination_handler=unit_coordination_handler, step=game_state.real_env_steps)
             if rewarded_actions is not None:
                 action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
                                                                  unit_coordination_handler=unit_coordination_handler,
@@ -111,7 +111,7 @@ class UnitController:
                                                 lichen_map: np.array, unit_coordination_handler: UnitCoordinationHandler,
                                                 real_env_step: int) -> ActionSequence:
 
-        valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta, unit_coordination_handler)
+        valid_reward_sequences = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit, unit_meta, unit_coordination_handler, real_env_step)
 
         best_sequence = self.evaluate_reward_sequences(occupancy_map=occupancy_map, real_env_step=real_env_step, rubble_map=rubble_map,
                                                        unit=unit, unit_coordination_handler=unit_coordination_handler,

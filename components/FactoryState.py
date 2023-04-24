@@ -2,7 +2,7 @@ import random
 import sys
 
 from enum import Enum
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 
 import numpy as np
 
@@ -54,6 +54,7 @@ class FactoryState:
         self.built_fighters_to_type: Dict[str, str] = dict()
 
         self.watered_last_round = False
+        self.fighter_build = False
 
     def update_stats(self, factory: Factory, unit_coordination_handler: UnitCoordinationHandler, game_state: ExtendedGameState,
                      self_player: str, tracked_units: Dict[str, UnitMetadata]):
@@ -63,25 +64,31 @@ class FactoryState:
         self.power_bank += self.savings_for_build
 
         x, y = factory.pos
+
+        self.ice_income_per_round = 0.0
+        self.ice_miners_to_type = dict()
         ice_miners = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ICE].taker_to_priority[x][y].keys()
         for miner_id in ice_miners:
             unit = game_state.game_state.units[self_player][miner_id]
             self.ice_miners_to_type[miner_id] = unit.unit_type
 
             digging_speed = 20 if unit.unit_type == "HEAVY" else 2
-            self.ice_income_per_round += digging_speed * self.n_mining_steps_in(unit.action_queue)
+            self.ice_income_per_round += (digging_speed * self.n_mining_steps_in(unit.action_queue)) / (
+                1 if len(unit.action_queue) == 0 else len(unit.action_queue))
 
+        self.ore_income_per_round = 0.0
+        self.ore_miners_to_type = dict()
         ore_miners = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ORE].taker_to_priority[x][y].keys()
         for miner_id in ore_miners:
             unit = game_state.game_state.units[self_player][miner_id]
             self.ore_miners_to_type[miner_id] = unit.unit_type
 
             digging_speed = 20 if unit.unit_type == "HEAVY" else 2
-            self.ore_income_per_round += digging_speed * self.n_mining_steps_in(unit.action_queue)
+            self.ore_income_per_round += (digging_speed * self.n_mining_steps_in(unit.action_queue)) / (
+                1 if len(unit.action_queue) == 0 else len(unit.action_queue))
 
         self.ore_reward = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ORE].reward_map[x][y]
         self.ice_reward = unit_coordination_handler.reward_action_handler[ActionType.TRANSFER_ICE].reward_map[x][y]
-
 
         miners_to_remove = []
         for unit_id in self.built_miners_to_type:
@@ -115,10 +122,12 @@ class FactoryState:
         else:
             return None
 
-    def calculate_next_rewards(self, game_state: ExtendedGameState):
+    def calculate_next_rewards(self, game_state: ExtendedGameState) -> List[Tuple[str, UnitRole]]:
         self.available_power = max(0.0, self.factory.power - self.power_bank)
+        light_ice_miners, heavy_ice_miners = self.count_types(self.ice_miners_to_type)
+        light_ore_miners, heavy_ore_miners = self.count_types(self.ore_miners_to_type)
 
-        if game_state.real_env_steps < 500:
+        if game_state.real_env_steps < 300:
             self.ore_reward = 5.0
             self.ice_reward = 1.0
         else:
@@ -131,10 +140,27 @@ class FactoryState:
                 self.ice_reward = 5.0
             elif self.factory.cargo.water < 100:
                 self.ore_reward = 1.0
-                self.ice_reward = 1.0
+                self.ice_reward = 2.0
 
+        if game_state.real_env_steps > 800:
+            self.max_ore_miners = 0
+            self.max_ice_miners = 5
 
-    # TODO ensure that heavy robots take most important task
+        _, alive_built_heavy_miners = self.count_types(self.built_miners_to_type)
+        role_switches = []
+        if self.ice_reward > self.ore_reward:
+            if heavy_ice_miners == 0 and light_ice_miners > 0 and alive_built_heavy_miners > 0:
+                for miner_id in self.ice_miners_to_type:
+                    if self.ice_miners_to_type[miner_id] == "LIGHT":
+                        if self.next_role != UnitRole.MINER:
+                            role_switches.append((miner_id, self.next_role))
+                        else:
+                            role_switches.append((miner_id, UnitRole.DIGGER))
+
+        return role_switches
+
+        # TODO ensure that heavy robots take most important task
+
     def calculate_next_build_and_role(self, game_state: ExtendedGameState):
         light_ice_miners, heavy_ice_miners = self.count_types(self.ice_miners_to_type)
         light_ore_miners, heavy_ore_miners = self.count_types(self.ore_miners_to_type)
@@ -146,7 +172,7 @@ class FactoryState:
             self.next_role = UnitRole.MINER
             return
 
-        if self.ore_income_per_round >= 6:
+        if self.ore_income_per_round >= 10:
             if heavy_miners < 2:
                 self.next_build_action = FactoryAction.BUILD_HEAVY
                 self.next_role = UnitRole.MINER
@@ -157,22 +183,22 @@ class FactoryState:
                     probabilities = [0.7, 0.3] if self.next_build_action == FactoryAction.BUILD_HEAVY else [1.0, 0.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
                 elif game_state.real_env_steps < 600:
-                    self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.8, 0.2])[0]
-                    probabilities = [0.5, 0.5] if self.next_build_action == FactoryAction.BUILD_HEAVY else [1.0, 0.0]
+                    self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.5, 0.5])[0]
+                    probabilities = [0.0, 1.0] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
                 # TODO take rubble into account and enemy bots
                 else:
                     self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.9, 0.1])[0]
-                    probabilities = [0.1, 0.9] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
+                    probabilities = [0.0, 1.0] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
-        elif 0 < self.ore_income_per_round < 6:
-            if light_miners < 2:
+        elif 0 < self.ore_income_per_round < 10:
+            if light_miners < 3:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
                 self.next_role = UnitRole.MINER
             else:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
-                probabilities = [0.8, 0.2] if game_state.real_env_steps < 800 else [0.0, 1.0]
+                probabilities = [0.8, 0.2] if game_state.real_env_steps < 700 else [0.0, 1.0]
                 self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
         else:  # no ore income

@@ -2,7 +2,6 @@ import random
 import sys
 from typing import Dict
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from components.FactoryState import FactoryState
@@ -97,12 +96,13 @@ class Agent():
             if unit_meta.last_action == ActionType.PICKUP_POWER:
                 self.unit_coordination_handler.clean_up_action_type(unit_id=unit_id, action_type=ActionType.PICKUP_POWER)
 
+        role_switches = []
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             factory_state = self.factory_states[factory_id]
 
             factory_state.update_stats(factory=factory, unit_coordination_handler=self.unit_coordination_handler,
                                        game_state=game_state, self_player=self.player, tracked_units=self.tracked_units)
-            factory_state.calculate_next_rewards(game_state)
+            role_switches += factory_state.calculate_next_rewards(game_state)
             if factory_state.recalculate_next_build_and_role_in == 0:
                 factory_state.calculate_next_build_and_role(game_state)
                 print(f"recalculating build and role for factory {factory_id}", file=sys.stderr)
@@ -122,7 +122,11 @@ class Agent():
                                                                   factory=factory_state.factory)
             self.unit_coordination_handler.update_factory_rewards(ActionType.TRANSFER_ORE, reward_value=factory_state.ore_reward,
                                                                   mask_value=factory_state.max_ore_miners,
-                                                                  factory=factory_state.factory)
+
+                                                                factory=factory_state.factory)
+        if len(role_switches) > 0:
+            for unit_id, new_role in role_switches:
+                self.tracked_units[unit_id].role = new_role
 
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
@@ -204,10 +208,10 @@ class Agent():
         return closest_factory_id
 
     def calculate_next_dig_mask(self, game_state: ExtendedGameState):
-        new_dig_reward_map = np.ones((MAP_SIZE, MAP_SIZE))*5
+
         inv_rubble = 100 - game_state.board.rubble
         dig_needed = np.where(inv_rubble < 100, inv_rubble, 0)
-        easy_dig = np.where(dig_needed > 20, 1, 0)
+        easy_dig = np.where(dig_needed > 80, 1, 0)
         new_dig_reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             pos = factory.pos
@@ -234,15 +238,14 @@ class Agent():
         for factory_id, factory in game_state.game_state.factories[self.player].items():
             pos = factory.pos
             distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
-            close_points = np.where(distance_map <= 10, 1, 0)
+            close_points = np.where(distance_map <= 9, 1, 0)
             furthest_points += close_points
         furthest_points = np.where(furthest_points > 0, 1, 0)
         new_dig_reward_mask = np.where(furthest_points == 1, new_dig_reward_mask, 0)
 
-        #if game_state.real_env_steps % 10 == 0 and self.player == "player_0":
-            # save dig reward map every 20 steps
-            # plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask.T)
-         #   pass
+        # if game_state.real_env_steps % 10 == 0 and self.player == "player_0":
+        #     plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask.T)
 
+        new_dig_reward_map = inv_rubble * 0.1
         return new_dig_reward_mask, new_dig_reward_map
 
