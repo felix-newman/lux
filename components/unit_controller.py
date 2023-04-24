@@ -41,7 +41,7 @@ class UnitController:
             unit_coordination_handler.clean_up_unit(unit_id)
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
                                                                                                unit_coordination_handler=unit_coordination_handler)
-            action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
+            action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
                                                              unit_coordination_handler=unit_coordination_handler,
                                                              rubble_map=game_state.board.rubble, lichen_map=lichen_map,
                                                              occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(unit),
@@ -57,7 +57,7 @@ class UnitController:
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
                                                                                                unit_coordination_handler=unit_coordination_handler)
             if rewarded_actions is not None:
-                action_sequence = self.evaluate_reward_sequences(unit=unit, reward_sequences=rewarded_actions,
+                action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
                                                                  unit_coordination_handler=unit_coordination_handler,
                                                                  rubble_map=game_state.board.rubble, lichen_map=lichen_map,
                                                                  occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(
@@ -101,17 +101,18 @@ class UnitController:
 
         best_sequence = self.evaluate_reward_sequences(occupancy_map=occupancy_map, real_env_step=real_env_step, rubble_map=rubble_map,
                                                        unit=unit, unit_coordination_handler=unit_coordination_handler,
-                                                       reward_sequences=valid_reward_sequences, lichen_map=lichen_map)
+                                                       reward_sequences=valid_reward_sequences, lichen_map=lichen_map, unit_meta=unit_meta)
 
         return best_sequence
 
-    def evaluate_reward_sequences(self, occupancy_map: np.array, real_env_step: int, rubble_map: np.array, unit: Unit, lichen_map: np.array,
+    def evaluate_reward_sequences(self, occupancy_map: np.array, real_env_step: int, rubble_map: np.array, unit: Unit,
+                                  unit_meta: UnitMetadata, lichen_map: np.array,
                                   unit_coordination_handler: UnitCoordinationHandler, reward_sequences: List[List[RewardedAction]]):
         best_sequence = ActionSequence(action_items=[], remaining_rewards=[], reward=-1_000_000_000)
         if reward_sequences is None:
             return best_sequence
         for sequence in reward_sequences:
-            action_sequence = self.calculate_optimal_action_sequence(unit=unit, rewarded_action_sequence=sequence,
+            action_sequence = self.calculate_optimal_action_sequence(unit=unit, unit_meta=unit_meta, rewarded_action_sequence=sequence,
                                                                      unit_coordination_handler=unit_coordination_handler,
                                                                      rubble_map=rubble_map, lichen_map=lichen_map,
                                                                      occupancy_map=occupancy_map, real_env_step=real_env_step)
@@ -120,7 +121,7 @@ class UnitController:
         return best_sequence
 
     def create_candidate_sequences(self, pos: np.array, rewarded_actions: List[RewardedAction],
-                                   unit_coordination_handler: UnitCoordinationHandler,
+                                   unit_coordination_handler: UnitCoordinationHandler, unit_meta: UnitMetadata,
                                    occupancy_map: np.array, unit_id: str, prev_action: ActionType, prev_pos: np.array) -> List[
         List[Tuple[int, int]]]:
         if len(rewarded_actions) == 0:
@@ -132,6 +133,9 @@ class UnitController:
         cur_action_type = rewarded_actions[0]
         discounted_reward_map = np.where(unit_coordination_handler.get_actual_reward_mask(action_type=cur_action_type) > 0, 1,
                                          0) * discount_map
+        if cur_action_type == ActionType.TRANSFER_ICE or cur_action_type == ActionType.TRANSFER_ORE:
+            discounted_reward_map *= unit_meta.factory_mask
+
         if np.max(discounted_reward_map) == 0 and np.min(discounted_reward_map) == 0:
             return []
 
@@ -145,12 +149,14 @@ class UnitController:
         candidates = find_top_n(self.beam_width, discounted_reward_map)
         for candidate in candidates:
             candidate_sequences += [[(candidate[0], candidate[1])] + sequence for sequence in
-                                    self.create_candidate_sequences(candidate, rewarded_actions[1:], unit_coordination_handler,
-                                                                    occupancy_map, unit_id, prev_action=cur_action_type,
-                                                                    prev_pos=np.array(candidate))]
+                                    self.create_candidate_sequences(candidate, rewarded_actions=rewarded_actions[1:],
+                                                                    unit_coordination_handler=unit_coordination_handler,
+                                                                    occupancy_map=occupancy_map, unit_id=unit_id,
+                                                                    prev_action=cur_action_type,
+                                                                    prev_pos=np.array(candidate), unit_meta=unit_meta)]
         return candidate_sequences
 
-    def calculate_optimal_action_sequence(self, unit: Unit,
+    def calculate_optimal_action_sequence(self, unit: Unit, unit_meta: UnitMetadata,
                                           rewarded_action_sequence: List[RewardedAction],
                                           unit_coordination_handler: UnitCoordinationHandler,
                                           rubble_map: np.array, lichen_map: np.array, occupancy_map: np.array,
@@ -167,8 +173,10 @@ class UnitController:
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
         # considered in the search
         best_action_sequence = ActionSequence(action_items=[], reward=-1_000_000_000, remaining_rewards=[])
-        position_sequences = self.create_candidate_sequences(unit.pos, rewarded_action_sequence,
-                                                             unit_coordination_handler, occupancy_map, unit.unit_id, prev_action=None,
+        position_sequences = self.create_candidate_sequences(pos=unit.pos, rewarded_actions=rewarded_action_sequence,
+                                                             unit_coordination_handler=unit_coordination_handler,
+                                                             occupancy_map=occupancy_map, unit_id=unit.unit_id, prev_action=None,
+                                                             unit_meta=unit_meta,
                                                              prev_pos=None)
         position_sequences = [sequence for sequence in position_sequences if not None in sequence]
         if len(position_sequences) == 0:

@@ -127,10 +127,12 @@ class Agent():
             if unit_id not in self.tracked_units:
                 closest_factory = self._find_closest_factory(unit.pos, game_state)
                 unit_role = self.factory_states[closest_factory].next_role
-
+                factory_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+                factory_mask[game_state.game_state.factories[self.player][closest_factory].pos_slice] = 1
                 unit_meta = UnitMetadata(unit_id=unit_id, role=unit_role, unit_type=unit.unit_type,
                                          cur_action_sequence=ActionSequence(action_items=[], reward=0, remaining_rewards=[]),
-                                         last_action=None)
+                                         last_action=None, factory_id=closest_factory,
+                                         factory_mask=factory_mask)
                 self.tracked_units[unit_id] = unit_meta
                 self.factory_states[closest_factory].register_unit_at_factory(unit_meta)
 

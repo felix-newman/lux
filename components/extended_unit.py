@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List
 
+import numpy as np
+
 from components.actions import ActionSequence, RewardedAction, ActionType
 
 
@@ -43,5 +45,7 @@ class UnitMetadata:
     cur_action_sequence: ActionSequence
     role: UnitRole
     last_action: ActionType
+    factory_mask: np.array
+    factory_id: str = ' '
 
 
