@@ -1,4 +1,5 @@
 import math
+import random
 import sys
 from typing import List, Tuple
 
@@ -8,7 +9,7 @@ from components.RewardSequenceCalculator import RewardSequenceCalculator
 from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
-from components.extended_unit import UnitMetadata
+from components.extended_unit import UnitMetadata, UnitRole
 from components.unit_coordination_handler import UnitCoordinationHandler
 from components.utils import find_top_n, get_cost_profile, transform_cost_profile, find_collision_path, get_cheapest_path
 from lux.unit import Unit
@@ -53,6 +54,19 @@ class UnitController:
                 return action_sequence, False
 
         if unit_coordination_handler.on_fight_field(unit.pos):
+            unit_coordination_handler.clean_up_unit(unit_id)
+            rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
+                                                                                               unit_coordination_handler=unit_coordination_handler)
+            if rewarded_actions is not None:
+                action_sequence = self.evaluate_reward_sequences(unit=unit, unit_meta=unit_meta, reward_sequences=rewarded_actions,
+                                                                 unit_coordination_handler=unit_coordination_handler,
+                                                                 rubble_map=game_state.board.rubble, lichen_map=lichen_map,
+                                                                 occupancy_map=unit_coordination_handler.get_enemy_adjusted_occupancy_map(
+                                                                     unit),
+                                                                 real_env_step=game_state.real_env_steps)
+                return action_sequence, False
+
+        if unit_meta.unit_type == UnitRole.FIGHTER and random.random() < 0.12:
             unit_coordination_handler.clean_up_unit(unit_id)
             rewarded_actions = self.reward_sequence_calculator.calculate_valid_reward_sequence(unit=unit, unit_meta=unit_meta,
                                                                                                unit_coordination_handler=unit_coordination_handler)

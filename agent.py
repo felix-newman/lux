@@ -9,7 +9,7 @@ from components.FactoryState import FactoryState
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
-from components.extended_unit import UnitMetadata
+from components.extended_unit import UnitMetadata, UnitRole
 from components.factory_placement import compute_factory_value_map
 from components.unit_controller import UnitController
 from components.unit_coordination_handler import UnitCoordinationHandler
@@ -105,6 +105,8 @@ class Agent():
             factory_state.calculate_next_rewards(game_state)
             if factory_state.recalculate_next_build_and_role_in == 0:
                 factory_state.calculate_next_build_and_role(game_state)
+                print(f"recalculating build and role for factory {factory_id}", file=sys.stderr)
+                print(f"next action {factory_state.next_action}", file=sys.stderr)
             factory_state.calculate_next_action(game_state)
 
             factory_state.register_next_action(unit_coordination_handler=self.unit_coordination_handler)
@@ -135,6 +137,11 @@ class Agent():
                                          factory_mask=factory_mask)
                 self.tracked_units[unit_id] = unit_meta
                 self.factory_states[closest_factory].register_unit_at_factory(unit_meta)
+
+        if game_state.real_env_steps > 850:
+            for unit_id, unit_meta in self.tracked_units.items():
+                if unit_meta.role == UnitRole.DIGGER:
+                    unit_meta.role = UnitRole.FIGHTER
 
         sorted_units = sorted(self.tracked_units.items(),
                               key=lambda x: (1, -game_state.game_state.units[self.player][x[0]].power) if x[1].unit_type == 'HEAVY' else (
@@ -222,9 +229,20 @@ class Agent():
         new_dig_reward_mask += easy_dig
         new_dig_reward_mask = np.clip(new_dig_reward_mask, 0, 1)
         new_dig_reward_mask = np.where(game_state.board.rubble > 0, new_dig_reward_mask, 0)
-        if game_state.real_env_steps % 10 == 0 and self.player == "player_0":
+
+        furthest_points = np.zeros((MAP_SIZE, MAP_SIZE))
+        for factory_id, factory in game_state.game_state.factories[self.player].items():
+            pos = factory.pos
+            distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
+            close_points = np.where(distance_map <= 10, 1, 0)
+            furthest_points += close_points
+        furthest_points = np.where(furthest_points > 0, 1, 0)
+        new_dig_reward_mask = np.where(furthest_points == 1, new_dig_reward_mask, 0)
+
+        #if game_state.real_env_steps % 10 == 0 and self.player == "player_0":
             # save dig reward map every 20 steps
-            plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask.T)
+            # plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask.T)
+         #   pass
 
         return new_dig_reward_mask, new_dig_reward_map
 

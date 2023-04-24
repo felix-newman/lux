@@ -53,6 +53,8 @@ class FactoryState:
         self.built_diggers_to_type: Dict[str, str] = dict()
         self.built_fighters_to_type: Dict[str, str] = dict()
 
+        self.watered_last_round = False
+
     def update_stats(self, factory: Factory, unit_coordination_handler: UnitCoordinationHandler, game_state: ExtendedGameState,
                      self_player: str, tracked_units: Dict[str, UnitMetadata]):
 
@@ -144,24 +146,27 @@ class FactoryState:
             self.next_role = UnitRole.MINER
             return
 
-        if self.ore_income_per_round >= 4:
+        if self.ore_income_per_round >= 6:
             if heavy_miners < 2:
                 self.next_build_action = FactoryAction.BUILD_HEAVY
                 self.next_role = UnitRole.MINER
             else:
                 # TODO take rubble into account and closeness to enemy factory
-                if game_state.real_env_steps < 600:
+                if game_state.real_env_steps < 400:
                     self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.8, 0.2])[0]
                     probabilities = [0.7, 0.3] if self.next_build_action == FactoryAction.BUILD_HEAVY else [1.0, 0.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
-
+                elif game_state.real_env_steps < 600:
+                    self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.8, 0.2])[0]
+                    probabilities = [0.5, 0.5] if self.next_build_action == FactoryAction.BUILD_HEAVY else [1.0, 0.0]
+                    self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
                 # TODO take rubble into account and enemy bots
                 else:
                     self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.9, 0.1])[0]
                     probabilities = [0.1, 0.9] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.0, 1.0]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
-        elif 0 < self.ore_income_per_round < 4:
+        elif 0 < self.ore_income_per_round < 6:
             if light_miners < 2:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
                 self.next_role = UnitRole.MINER
@@ -189,12 +194,18 @@ class FactoryState:
         elif self.next_build_action == FactoryAction.BUILD_HEAVY and self.factory.can_build_heavy(game_state.game_state):
             self.next_action = FactoryAction.BUILD_HEAVY
             return
-
         # TODO improve to include alternating watering
         elif game_state.real_env_steps > 800 and self.factory.can_water(game_state) and self.factory.cargo.water - self.factory.water_cost(
                 game_state) > 1000 - game_state.real_env_steps:
             self.next_action = FactoryAction.WATER
             return
+        elif self.factory.can_water(game_state) and self.factory.cargo.water - self.factory.water_cost(game_state) > 75:
+            if not self.watered_last_round:
+                self.next_action = FactoryAction.WATER
+                self.watered_last_round = True
+                return
+            else:
+                self.watered_last_round = False
 
         self.next_action = FactoryAction.NOOP
 

@@ -50,7 +50,10 @@ class RewardSequenceCalculator:
         valid_reward_sequences = [
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN],
             [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
+            [ActionType.PICKUP_POWER, ActionType.DIG, ActionType.DIG, ActionType.DIG, ActionType.DIG, ActionType.DIG, ActionType.RETURN],
             [ActionType.DIG, ActionType.DIG, ActionType.RETURN],
+            [ActionType.DIG, ActionType.DIG],
             [ActionType.RECHARGE, ActionType.RETURN]
         ]
 
@@ -79,6 +82,7 @@ class RewardSequenceCalculator:
             [ActionType.FIGHT],
 
             [ActionType.PICKUP_POWER, ActionType.LOOT],
+            [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT],
             [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
             [ActionType.LOOT],
             [ActionType.RECHARGE]
@@ -98,4 +102,3 @@ class RewardSequenceCalculator:
                 return [[ActionType.RETURN]]  # TODO should be flee
             else:
                 return [[ActionType.FIGHT]]
-
