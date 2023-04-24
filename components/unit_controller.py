@@ -182,6 +182,7 @@ class UnitController:
         digging_speed = 20 if unit.unit_type == 'HEAVY' else 2  # and here
         looting_speed = 100 if unit.unit_type == 'HEAVY' else 10  # and here
         battery_capacity = 3000 if unit.unit_type == 'HEAVY' else 150  # and here
+        explode_costs = 100 if unit.unit_type == 'HEAVY' else 10  # and here
 
         # TODO issue with factory actions: Since factories are spread out there are multiple tiles which actually dont
         # differ reward wise. I would be better to treat them as one field, so that multiple factories would be
@@ -228,12 +229,15 @@ class UnitController:
                     power_end += power_pickup
                 power_start = power_end
             else:
-                power_for_digging = self._power_for_digging(power_profiles=power_profiles,
+                least_power = self._power_for_digging(power_profiles=power_profiles,
                                                             rewarded_action_sequence=rewarded_action_sequence)
                 safety_moves = 2  # TODO collect free parameters in central place
-                power_for_digging -= safety_moves * move_costs
+                power_for_digging = least_power -  safety_moves * move_costs
                 if power_for_digging < digging_costs and (
                         ActionType.MINE_ORE in rewarded_action_sequence or ActionType.MINE_ICE in rewarded_action_sequence or ActionType.DIG in rewarded_action_sequence or ActionType.LOOT):
+                    continue
+
+                if least_power < explode_costs and ActionType.EXPLODE in rewarded_action_sequence:
                     continue
 
                 # build sequence
@@ -342,6 +346,8 @@ class UnitController:
             return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
         if action_type is ActionType.FIGHT:
             return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
+        if action_type is ActionType.EXPLODE:
+            return unit_coordination_handler.get_reward_map(ActionType.EXPLODE)[x, y]
         else:
             print(f"Warning: invalid action type for reward {action_type}", file=sys.stderr)
         return 0

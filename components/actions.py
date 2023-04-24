@@ -23,6 +23,7 @@ class ActionType(Enum):
     RECHARGE = 12
     FIGHT = 13
     LOOT = 14
+    EXPLODE = 15
 
     @property
     def is_factory_action(self) -> bool:
@@ -41,10 +42,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE]
 
 
 class Direction(Enum):
@@ -83,6 +84,7 @@ class ActionItem:
             ActionType.RECHARGE: "RC",
             ActionType.FIGHT: "F",
             ActionType.LOOT: "LT",
+            ActionType.EXPLODE: "EX",
         }
 
         return f"({abbrev[self.type]}, {self.repeat})"
@@ -130,6 +132,9 @@ class ActionItem:
 
         if self.type == ActionType.RECHARGE:
             return np.array([5, 0, 4, int(self.amount), 0, 1])
+
+        if self.type == ActionType.EXPLODE:
+            return np.array([4, 0, 0, 0, 0, 1])
 
 
 @dataclass
@@ -212,6 +217,9 @@ def rewarded_actions_from_lux_action_queue(action_queue: List[np.array]) -> List
 
         if lux_action[0] == 5:
             return ActionType.RECHARGE, None
+
+        if lux_action[0] == 4:
+            return ActionType.EXPLODE, None
 
         else:
             return None, None

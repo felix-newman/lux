@@ -66,7 +66,7 @@ class RewardSequenceCalculator:
         if heaviest_robot == 1 and unit.unit_type == 'HEAVY':
             return None
         else:
-            # adjusted_power = unit.power - 5 if unit.unit_type == 'LIGHT' else unit.power - 80
+            adjusted_power = unit.power - 5 if unit.unit_type == 'LIGHT' else unit.power - 80
             if own_type < heaviest_robot:
                 return [[ActionType.RETURN]]  # TODO should be flee
             else:
@@ -88,7 +88,7 @@ class RewardSequenceCalculator:
                 [ActionType.LOOT],
                 [ActionType.RECHARGE]
             ]
-        else:
+        elif step < 970:
             valid_reward_sequences = [
                 [ActionType.FIGHT],
                 [ActionType.PICKUP_POWER, ActionType.LOOT, ActionType.LOOT],
@@ -98,7 +98,12 @@ class RewardSequenceCalculator:
                 [ActionType.LOOT],
                 [ActionType.RECHARGE]
             ]
-
+        else:
+            valid_reward_sequences = [
+                [ActionType.EXPLODE],
+                [ActionType.LOOT],
+                [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
+            ]
         return valid_reward_sequences
 
     @staticmethod

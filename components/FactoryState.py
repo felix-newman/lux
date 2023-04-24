@@ -221,7 +221,7 @@ class FactoryState:
             self.next_action = FactoryAction.BUILD_HEAVY
             return
         # TODO improve to include alternating watering
-        elif game_state.real_env_steps > 800 and self.factory.can_water(game_state) and self.factory.cargo.water - self.factory.water_cost(
+        elif game_state.real_env_steps > 750 and self.factory.can_water(game_state) and self.factory.cargo.water - self.factory.water_cost(
                 game_state) > 1000 - game_state.real_env_steps:
             self.next_action = FactoryAction.WATER
             return

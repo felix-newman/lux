@@ -111,6 +111,13 @@ class UnitCoordinationHandler:
 
         self.reward_action_handler[ActionType.LOOT]._reward_mask = reward_mask
 
+    def update_explode_map(self, game_state: ExtendedGameState):
+        reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+        for strain_id in self.enemy_lichen_strains:
+            reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
+
+        self.reward_action_handler[ActionType.EXPLODE]._reward_mask = reward_mask
+
     def on_fight_field(self, cur_pos: np.array):
         return self.enemy_map.is_fighting_position(cur_pos[0], cur_pos[1])
 
@@ -302,4 +309,15 @@ class UnitCoordinationHandler:
 
             reward_action_handler._reward_mask = reward_mask
             reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE)) * 2
+            return reward_action_handler
+
+        elif action_type is ActionType.EXPLODE:
+            reward_action_handler = RewardActionHandler(action_type)
+
+            reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+            for strain_id in self.enemy_lichen_strains:
+                reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
+
+            reward_action_handler._reward_mask = reward_mask
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE)) * 5
             return reward_action_handler

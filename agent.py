@@ -76,6 +76,7 @@ class Agent():
         self.unit_coordination_handler.build_occupancy_map(game_state, self.opp_player)
         self.unit_coordination_handler.update_enemy_map(game_state)
         self.unit_coordination_handler.update_loot_map(game_state)
+        self.unit_coordination_handler.update_explode_map(game_state)
 
         new_dig_reward_mask, new_dig_reward_map = self.calculate_next_dig_mask(game_state)
 
