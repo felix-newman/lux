@@ -3,6 +3,7 @@ from typing import Dict, List
 
 import numpy as np
 import random
+import matplotlib.pyplot as plt
 
 from components.FactoryState import FactoryState, FactoryAction
 from components.actions import ActionSequence, ActionType
@@ -76,10 +77,14 @@ class Agent():
         self.unit_coordination_handler.update_enemy_map(game_state)
         self.unit_coordination_handler.update_loot_map(game_state)
 
-        new_dig_reward_map = (np.ones(
-            (MAP_SIZE, MAP_SIZE)) - game_state.board.ice - game_state.board.ore - np.where(game_state.board.factory_occupancy_map >= 0,
-                                                                                           1, 0)) * game_state.board.rubble
-        new_dig_reward_mask = np.where(new_dig_reward_map > 0, 1, 0)
+        new_dig_reward_map = np.ones((MAP_SIZE, MAP_SIZE))
+        inv_rubble = 100 - game_state.board.rubble
+        dig_needed = np.where(inv_rubble < 100, inv_rubble, 0)
+        new_dig_reward_mask = np.where(dig_needed > 50, 1, 0)
+        if game_state.real_env_steps % 20 == 0 and self.player == "player_0":
+            # save dig reward map every 20 steps
+            plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask)
+
         self.unit_coordination_handler.update_reward_handler(ActionType.DIG, new_dig_reward_map, new_dig_reward_mask)
 
         # clean up dead units, units with empty action sequences

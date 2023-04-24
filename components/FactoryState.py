@@ -123,13 +123,13 @@ class FactoryState:
             self.ore_reward = 1.0
             self.ice_reward = 1.0
 
-        if self.factory.cargo.water < 100 and game_state.real_env_steps < 900:
-            self.ore_reward = 1.0
-            self.ice_reward = 1.0
-        elif self.factory.cargo.water < 75 and game_state.real_env_steps < 900:
-            self.ore_reward = 1.0
-            self.ice_reward = 5.0
-            # TODO do role switch here
+        if game_state.real_env_steps < 900:
+            if self.factory.cargo.water < 75:
+                self.ore_reward = 1.0
+                self.ice_reward = 5.0
+            elif self.factory.cargo.water < 100:
+                self.ore_reward = 1.0
+                self.ice_reward = 1.0
 
 
     # TODO ensure that heavy robots take most important task
@@ -152,7 +152,7 @@ class FactoryState:
                 # TODO take rubble into account and closeness to enemy factory
                 if game_state.real_env_steps < 500:
                     self.next_build_action = random.choices([FactoryAction.BUILD_LIGHT, FactoryAction.BUILD_HEAVY], weights=[0.7, 0.3])[0]
-                    probabilities = [0.5, 0.5] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.3, 0.7]
+                    probabilities = [1.0, 0.0] if self.next_build_action == FactoryAction.BUILD_HEAVY else [0.3, 0.7]
                     self.next_role = random.choices([UnitRole.DIGGER, UnitRole.FIGHTER], weights=probabilities)[0]
 
                 # TODO take rubble into account and enemy bots
@@ -177,6 +177,8 @@ class FactoryState:
             else:
                 self.next_build_action = FactoryAction.BUILD_LIGHT
                 self.next_role = UnitRole.DIGGER
+
+        self.recalculate_next_build_and_role_in = 60
 
         print(f"Next builds and role wille be: {self.next_build_action}, {self.next_role}", file=sys.stderr)
 

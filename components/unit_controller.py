@@ -237,7 +237,7 @@ class UnitController:
                     repeat = 1
                     amount = 0
                     if following_rewarded_action is ActionType.MINE_ORE:
-                        repeat = min(15, math.floor(power_for_digging / digging_costs))
+                        repeat = min(10, math.floor(power_for_digging / digging_costs))
                         cur_ore += repeat * digging_speed
 
                     if following_rewarded_action is ActionType.MINE_ICE:
