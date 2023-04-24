@@ -1,18 +1,19 @@
-import sys
-from typing import Dict, List
-
-import numpy as np
 import random
-import matplotlib.pyplot as plt
+import sys
+from typing import Dict
 
-from components.FactoryState import FactoryState, FactoryAction
+import matplotlib.pyplot as plt
+import numpy as np
+
+from components.FactoryState import FactoryState
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
-from components.extended_unit import UnitRole, UnitMetadata
+from components.extended_unit import UnitMetadata
 from components.factory_placement import compute_factory_value_map
 from components.unit_controller import UnitController
 from components.unit_coordination_handler import UnitCoordinationHandler
+from components.utils import get_cheapest_path
 from lux.config import EnvConfig
 from lux.kit import obs_to_game_state
 from lux.utils import my_turn_to_place_factory
@@ -77,13 +78,7 @@ class Agent():
         self.unit_coordination_handler.update_enemy_map(game_state)
         self.unit_coordination_handler.update_loot_map(game_state)
 
-        new_dig_reward_map = np.ones((MAP_SIZE, MAP_SIZE))
-        inv_rubble = 100 - game_state.board.rubble
-        dig_needed = np.where(inv_rubble < 100, inv_rubble, 0)
-        new_dig_reward_mask = np.where(dig_needed > 50, 1, 0)
-        if game_state.real_env_steps % 20 == 0 and self.player == "player_0":
-            # save dig reward map every 20 steps
-            plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask)
+        new_dig_reward_mask, new_dig_reward_map = self.calculate_next_dig_mask(game_state)
 
         self.unit_coordination_handler.update_reward_handler(ActionType.DIG, new_dig_reward_map, new_dig_reward_mask)
 
@@ -200,3 +195,36 @@ class Agent():
                 closest_factory_id = factory_id
 
         return closest_factory_id
+
+    def calculate_next_dig_mask(self, game_state: ExtendedGameState):
+        new_dig_reward_map = np.ones((MAP_SIZE, MAP_SIZE))*5
+        inv_rubble = 100 - game_state.board.rubble
+        dig_needed = np.where(inv_rubble < 100, inv_rubble, 0)
+        easy_dig = np.where(dig_needed > 50, 1, 0)
+        new_dig_reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+        for factory_id, factory in game_state.game_state.factories[self.player].items():
+            pos = factory.pos
+            distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
+            close_points = np.where(distance_map <= 6, 1, 0)
+
+            target_point_mask = np.logical_and(close_points, easy_dig)
+            if np.max(target_point_mask) == 0:
+                new_dig_reward_mask += close_points
+            else:
+                connected_points = np.argwhere(target_point_mask == 1)[:8]
+
+                for point in connected_points:
+                    points =np.array(get_cheapest_path(pos, point, game_state.board.rubble))
+                    new_dig_reward_mask[points[:, 0], points[:, 1]] = 1
+
+        new_dig_reward_mask = np.where(game_state.board.factory_occupancy_map >= 0, 0, new_dig_reward_mask)
+
+        new_dig_reward_mask += easy_dig
+        new_dig_reward_mask = np.clip(new_dig_reward_mask, 0, 1)
+        new_dig_reward_mask = np.where(game_state.board.rubble > 0, new_dig_reward_mask, 0)
+        if game_state.real_env_steps % 10 == 0 and self.player == "player_0":
+            # save dig reward map every 20 steps
+            plt.imsave(f"videos/dig_reward_mask_{game_state.real_env_steps}.png", new_dig_reward_mask.T)
+
+        return new_dig_reward_mask, new_dig_reward_map
+

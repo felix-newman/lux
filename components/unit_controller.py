@@ -319,7 +319,7 @@ class UnitController:
         if action_type is ActionType.PICKUP_POWER:
             return 0
         if action_type is ActionType.DIG:
-            return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y] * 0.2
+            return unit_coordination_handler.get_reward_map(ActionType.DIG)[x, y]
         if action_type is ActionType.RETURN:
             return 0
         if action_type is ActionType.RECHARGE:
