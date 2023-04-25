@@ -286,6 +286,9 @@ class UnitController:
                     elif following_rewarded_action is ActionType.RECHARGE:
                         recharge_pwoer = move_costs * 5
                         amount = min(battery_capacity, power_profile[-1] + recharge_pwoer)
+                    elif following_rewarded_action is ActionType.GUARD:
+                        recharge_power = battery_capacity
+                        amount = battery_capacity
 
                     rewarded_action = ActionItem(type=following_rewarded_action, position=np.array(cur_pos),
                                                  repeat=repeat, direction=Direction.CENTER, amount=amount)
@@ -348,6 +351,8 @@ class UnitController:
             return unit_coordination_handler.get_reward_map(ActionType.LOOT)[x, y]
         if action_type is ActionType.EXPLODE:
             return unit_coordination_handler.get_reward_map(ActionType.EXPLODE)[x, y]
+        if action_type is ActionType.GUARD:
+            return unit_coordination_handler.get_reward_map(ActionType.GUARD)[x, y]
         else:
             print(f"Warning: invalid action type for reward {action_type}", file=sys.stderr)
         return 0

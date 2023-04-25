@@ -57,4 +57,4 @@ def compute_factory_value_map(game_state: GameState, lichen_potential_map: np.ar
         ore_distance = distance_transform_cdt(1 - ore_map, metric='taxicab')
     ore_score_map = normalize_matrix(96 - ore_distance)
 
-    return 8 * ice_score_map #+ 2 * lichen_potential_map + ore_score_map
+    return 8 * ice_score_map + 2 * lichen_potential_map + ore_score_map

@@ -8,7 +8,7 @@ from components.actions import ActionSequence, RewardedAction, rewarded_actions,
 from components.constants import MAP_SIZE
 from components.enemy_map import EnemyMap
 from components.extended_game_state import ExtendedGameState
-from components.utils import get_position_after_lux_action
+from components.utils import get_position_after_lux_action, apply_mask_with_probability
 from lux.factory import Factory
 from lux.unit import Unit
 
@@ -117,6 +117,21 @@ class UnitCoordinationHandler:
             reward_mask += np.where(game_state.board.lichen_strains == strain_id, 1, 0)
 
         self.reward_action_handler[ActionType.EXPLODE]._reward_mask = reward_mask
+
+    def update_guard_map(self, game_state: ExtendedGameState):
+        reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+        for _, factory in game_state.game_state.factories[self.self_player].items():
+            pos = factory.pos
+            distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
+            close_points_outer = np.where(distance_map <= 7, 1, 0)
+            close_points_inner = np.where(distance_map > 5, 1, 0)
+            close_points = close_points_outer * close_points_inner
+
+            close_points = apply_mask_with_probability(close_points.astype(bool), 0.05)
+            reward_mask += close_points
+
+        reward_mask = np.clip(reward_mask, 0, 1)
+        self.reward_action_handler[ActionType.GUARD]._reward_mask = reward_mask
 
     def on_fight_field(self, cur_pos: np.array):
         return self.enemy_map.is_fighting_position(cur_pos[0], cur_pos[1])
@@ -320,4 +335,23 @@ class UnitCoordinationHandler:
 
             reward_action_handler._reward_mask = reward_mask
             reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE)) * 5
+            return reward_action_handler
+
+        elif action_type is ActionType.GUARD:
+            reward_action_handler = RewardActionHandler(action_type)
+
+            reward_mask = np.zeros((MAP_SIZE, MAP_SIZE))
+            for _, factory in game_state.game_state.factories[self.self_player].items():
+                pos = factory.pos
+                distance_map = np.sum(np.abs(np.indices((48, 48)) - np.array(pos)[:, None, None]), axis=0)
+                close_points_outer = np.where(distance_map <= 10, 1, 0)
+                close_points_inner = np.where(distance_map > 6, 1, 0)
+                close_points = close_points_outer * close_points_inner
+
+                close_points = apply_mask_with_probability(close_points.astype(bool), 0.05)
+                reward_mask += close_points
+
+            reward_mask = np.clip(reward_mask, 0, 1)
+            reward_action_handler._reward_mask = reward_mask
+            reward_action_handler.reward_map = np.ones((MAP_SIZE, MAP_SIZE))
             return reward_action_handler

@@ -24,6 +24,7 @@ class ActionType(Enum):
     FIGHT = 13
     LOOT = 14
     EXPLODE = 15
+    GUARD = 16
 
     @property
     def is_factory_action(self) -> bool:
@@ -42,10 +43,10 @@ factory_actions: Set[ActionType] = {ActionType.TRANSFER_ICE, ActionType.TRANSFER
 move_actions: Set[ActionType] = {ActionType.MOVE_CENTER, ActionType.MOVE_UP, ActionType.MOVE_DOWN, ActionType.MOVE_RIGHT,
                                  ActionType.MOVE_LEFT}
 rewarded_actions: Set[ActionType] = {ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE}
+                                     ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE, ActionType.GUARD}
 
 RewardedAction = Literal[ActionType.MINE_ICE, ActionType.MINE_ORE, ActionType.TRANSFER_ICE, ActionType.TRANSFER_ORE,
-ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE]
+ActionType.PICKUP_POWER, ActionType.DIG, ActionType.RETURN, ActionType.RECHARGE, ActionType.FIGHT, ActionType.LOOT, ActionType.EXPLODE, ActionType.GUARD]
 
 
 class Direction(Enum):
@@ -85,6 +86,7 @@ class ActionItem:
             ActionType.FIGHT: "F",
             ActionType.LOOT: "LT",
             ActionType.EXPLODE: "EX",
+            ActionType.GUARD: "G",
         }
 
         return f"({abbrev[self.type]}, {self.repeat})"
@@ -135,6 +137,9 @@ class ActionItem:
 
         if self.type == ActionType.EXPLODE:
             return np.array([4, 0, 0, 0, 0, 1])
+
+        if self.type == ActionType.GUARD:
+            return np.array([5, 0, 4, int(self.amount), 0, 1])
 
 
 @dataclass

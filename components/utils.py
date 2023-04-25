@@ -179,3 +179,21 @@ def build_travel_graph(cost_map: np.array):
                 g.add_edge(g1, g2, cost=20 + cost_map[g2])
 
     return g
+
+
+def apply_mask_with_probability(mask, probability):
+    """
+    Apply a binary mask with a certain probability of keeping each 1 entry.
+    :param mask: binary mask as a NumPy array
+    :param probability: probability of keeping each 1 entry, between 0 and 1
+    :return: masked binary mask as a NumPy array
+    """
+    assert 0 <= probability <= 1, "Probability should be between 0 and 1"
+
+    # Create a random array with the same shape as the mask, with values between 0 and 1
+    random_values = np.random.random(mask.shape)
+
+    # Create a new mask where each 1 entry is kept with probability p
+    masked = np.logical_and(mask, random_values <= probability)
+
+    return masked

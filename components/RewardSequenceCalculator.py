@@ -104,6 +104,7 @@ class RewardSequenceCalculator:
                 [ActionType.LOOT],
                 [ActionType.LOOT, ActionType.LOOT, ActionType.LOOT],
             ]
+
         return valid_reward_sequences
 
     @staticmethod

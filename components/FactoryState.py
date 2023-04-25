@@ -140,7 +140,7 @@ class FactoryState:
                 self.ice_reward = 5.0
             elif self.factory.cargo.water < 125:
                 self.ore_reward = 1.0
-                self.ice_reward = 2.0
+                self.ice_reward = 3.0
 
         if game_state.real_env_steps > 800:
             self.max_ore_miners = 0
@@ -156,6 +156,8 @@ class FactoryState:
                             role_switches.append((miner_id, self.next_role))
                         else:
                             role_switches.append((miner_id, UnitRole.DIGGER))
+                    else:
+                        role_switches.append((miner_id, UnitRole.MINER))
 
         return role_switches
 

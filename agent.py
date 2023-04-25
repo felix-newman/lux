@@ -82,6 +82,7 @@ class Agent():
         self.unit_coordination_handler.update_enemy_map(game_state)
         self.unit_coordination_handler.update_loot_map(game_state)
         self.unit_coordination_handler.update_explode_map(game_state)
+        self.unit_coordination_handler.update_guard_map(game_state)
 
         new_dig_reward_mask, new_dig_reward_map = self.calculate_next_dig_mask(game_state)
 
@@ -129,10 +130,11 @@ class Agent():
             self.unit_coordination_handler.update_factory_rewards(ActionType.TRANSFER_ORE, reward_value=factory_state.ore_reward,
                                                                   mask_value=factory_state.max_ore_miners,
 
-                                                                factory=factory_state.factory)
+                                                                  factory=factory_state.factory)
         if len(role_switches) > 0:
             for unit_id, new_role in role_switches:
                 self.tracked_units[unit_id].role = new_role
+                game_state.game_state.units[self.player][unit_id].action_queue = []
 
         # assign tasks to units
         for unit_id, unit in game_state.game_state.units[self.player].items():
@@ -231,7 +233,7 @@ class Agent():
                 connected_points = np.argwhere(target_point_mask == 1)[:8]
 
                 for point in connected_points:
-                    points =np.array(get_cheapest_path(pos, point, game_state.board.rubble))
+                    points = np.array(get_cheapest_path(pos, point, game_state.board.rubble))
                     new_dig_reward_mask[points[:, 0], points[:, 1]] = 1
 
         new_dig_reward_mask = np.where(game_state.board.factory_occupancy_map >= 0, 0, new_dig_reward_mask)
@@ -254,4 +256,3 @@ class Agent():
 
         new_dig_reward_map = inv_rubble * 0.1
         return new_dig_reward_mask, new_dig_reward_map
-
