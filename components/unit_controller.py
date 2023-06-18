@@ -5,7 +5,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from components.RewardSequenceCalculator import RewardSequenceCalculator
+from components.reward_sequence_calculator import RewardSequenceCalculator
 from components.actions import ActionSequence, ActionItem, ActionType, Direction, RewardedAction, DIRECTION_DELTAS
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState

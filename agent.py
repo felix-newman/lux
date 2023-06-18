@@ -5,7 +5,7 @@ from typing import Dict
 import numpy as np
 from matplotlib import pyplot as plt
 
-from components.FactoryState import FactoryState
+from components.factory_state import FactoryState
 from components.actions import ActionSequence, ActionType
 from components.constants import MAP_SIZE
 from components.extended_game_state import ExtendedGameState
